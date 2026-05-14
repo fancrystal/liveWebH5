@@ -120,16 +120,30 @@ export function useStreamMixer() {
         ctx.textBaseline = 'alphabetic'
       }
 
-      // 5. Camera PiP (bottom-right, 22% width)
+      // 5. Camera PiP — position/size mirrors the UI exactly
       if (mediaStore.isCameraOn && mediaStore.cameraStream) {
         if (!camVideo || camVideo.srcObject !== mediaStore.cameraStream) {
           camVideo = createVideoEl(mediaStore.cameraStream)
         }
         if (camVideo.readyState >= 2) {
-          const pw = Math.round(width * 0.22)
-          const ph = Math.round(pw * 9 / 16)
-          const px = width - pw - 16
-          const py = height - ph - 16
+          // whiteboardCanvas.width/height = actual screen px of the canvas area
+          const canvasW = whiteboardCanvas.width  || width
+          const canvasH = whiteboardCanvas.height || height
+          const scaleX  = width  / canvasW
+          const scaleY  = height / canvasH
+
+          // CameraPreview.vue CSS default: top:10px right:10px
+          // pos.x/y is the translate offset from that default position
+          const pip     = mediaStore.cameraPip
+          const screenL = canvasW - 10 - pip.w + pip.x   // left edge in screen px
+          const screenT = 10 + pip.y                       // top  edge in screen px
+
+          const px = Math.round(screenL * scaleX)
+          const py = Math.round(screenT * scaleY)
+          const pw = Math.round(pip.w   * scaleX)
+          const ph = Math.round(pip.h   * scaleY)
+
+          // Draw horizontally flipped (mirrors the CSS scaleX(-1) on the <video>)
           ctx.save()
           ctx.translate(px + pw, py)
           ctx.scale(-1, 1)

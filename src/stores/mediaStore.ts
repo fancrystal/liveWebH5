@@ -12,6 +12,16 @@ export const useMediaStore = defineStore('media', () => {
   const isScreenSharing = ref(false)
   const isCameraVisible = ref(true)  // PiP window visibility
 
+  /**
+   * Camera PiP layout state — shared between CameraPreview.vue and useStreamMixer.
+   * pos: translate offset from the CSS default position (top:10px right:10px)
+   * size: current pip dimensions in screen pixels
+   */
+  const cameraPip = ref({ x: 0, y: 0, w: 224, h: 126 })
+  function updateCameraPip(patch: Partial<{ x: number; y: number; w: number; h: number }>) {
+    cameraPip.value = { ...cameraPip.value, ...patch }
+  }
+
   const videoDevices = ref<MediaDeviceInfo[]>([])
   const audioDevices = ref<MediaDeviceInfo[]>([])
   const activeVideoDeviceId = ref<string>('')
@@ -98,6 +108,7 @@ export const useMediaStore = defineStore('media', () => {
     cameraStream, micStream, screenStream,
     isCameraOn, isMicOn, isScreenSharing, isCameraVisible,
     videoDevices, audioDevices, activeVideoDeviceId, activeAudioDeviceId,
+    cameraPip, updateCameraPip,
     loadDevices, toggleCamera, toggleMic, switchCamera, switchMic,
     startScreenShare, stopScreenShare, toggleCameraVisibility,
   }

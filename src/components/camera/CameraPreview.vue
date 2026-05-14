@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onUnmounted, watchEffect } from 'vue'
 import { useMediaStore } from '@/stores/mediaStore'
 
 const mediaStore = useMediaStore()
@@ -86,6 +86,11 @@ function onResizeUp() {
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', onResizeUp)
 }
+
+// ─── Sync pos+size to store so useStreamMixer can mirror exact layout ────────
+watchEffect(() => {
+  mediaStore.updateCameraPip({ x: pos.value.x, y: pos.value.y, w: size.value.w, h: size.value.h })
+})
 
 // ─── Scroll wheel to scale (以左上角为锚点) ──────────────────────────────────
 function onWheel(e: WheelEvent) {

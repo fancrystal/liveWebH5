@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # SRS WebRTC / RTMP media server
+  srs:
+    image: registry.cn-hangzhou.aliyuncs.com/ossrs/srs:5
+    container_name: live-srs
+    restart: unless-stopped
+    environment:
+      - CANDIDATE=172.21.0.15   # Server's public/LAN IP for WebRTC ICE
+      - SRS_DAEMON=off
+      - SRS_IN_DOCKER=on
+    ports:
+      - "1935:1935"       # RTMP
+      - "1985:1985"       # HTTP API / WHIP
+      - "8000:8000/udp"   # WebRTC UDP
+      - "8081:8080"       # HTTP console
+
+  # Nginx — serves the built frontend
+  nginx:
+    image: nginx:alpine
+    container_name: live-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - srs

@@ -35,7 +35,27 @@ export function useWebRTC() {
     const conn = new RTCPeerConnection({ iceServers: ICE_SERVERS })
     pc.value = conn
 
-    stream.getTracks().forEach(t => conn.addTrack(t, stream))
+    // Use addTransceiver instead of addTrack so we can set encoding constraints.
+    // Without scaleResolutionDownBy=1 Chrome's bandwidth estimator silently
+    // drops the resolution (e.g. 1280×720 → 320×180).
+    const videoTrack = stream.getVideoTracks()[0]
+    if (videoTrack) {
+      // 'detail' tells the encoder this is screen/document content,
+      // preserving sharpness over motion-smoothing.
+      videoTrack.contentHint = 'detail'
+      conn.addTransceiver(videoTrack, {
+        direction: 'sendonly',
+        sendEncodings: [{
+          maxBitrate:            4_000_000,  // 4 Mbps — enough for 1280×720@30
+          maxFramerate:          30,
+          scaleResolutionDownBy: 1.0,        // no downscaling
+        }],
+      })
+    }
+    // Audio tracks — no special constraints needed
+    stream.getAudioTracks().forEach(t =>
+      conn.addTransceiver(t, { direction: 'sendonly' }),
+    )
 
     conn.oniceconnectionstatechange = () => {
       isConnected.value = conn.iceConnectionState === 'connected'
@@ -109,6 +129,25 @@ export function useWebRTC() {
     }
     reconnectCount = 0
     error.value    = null
+
+    // After signaling is stable, enforce encoding params again.
+    // Some SRS versions may renegotiate and reset the sender parameters.
+    conn.onsignalingstatechange = async () => {
+      if (conn.signalingState !== 'stable') return
+      for (const sender of conn.getSenders()) {
+        if (sender.track?.kind !== 'video') continue
+        try {
+          const params = sender.getParameters()
+          if (!params.encodings?.length) params.encodings = [{}]
+          params.encodings.forEach(enc => {
+            enc.maxBitrate            = 4_000_000
+            enc.maxFramerate          = 30
+            enc.scaleResolutionDownBy = 1.0
+          })
+          await sender.setParameters(params)
+        } catch { /* older browsers may not support all fields */ }
+      }
+    }
   }
 
   function scheduleReconnect() {
