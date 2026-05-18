@@ -69,16 +69,17 @@ const whipUrlHint = computed(() => {
           <!-- Push URL -->
           <div class="form-section">
             <div class="form-label">{{ local.mode === 'webrtc' ? 'WHIP 推流地址' : 'RTMP 推流地址' }}</div>
-            <input
-              v-if="local.mode === 'webrtc'"
-              v-model="local.whipUrl"
-              class="form-input"
-              :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
-              placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
-            />
-            <div v-if="local.mode === 'webrtc' && whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
-              {{ whipUrlHint.text }}
-            </div>
+            <template v-if="local.mode === 'webrtc'">
+              <input
+                v-model="local.whipUrl"
+                class="form-input"
+                :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
+                placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
+              />
+              <div v-if="whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
+                {{ whipUrlHint.text }}
+              </div>
+            </template>
             <input
               v-else
               v-model="local.rtmpUrl"

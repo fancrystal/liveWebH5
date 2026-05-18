@@ -93,8 +93,24 @@ watchEffect(() => {
 })
 
 // ─── Scroll wheel to scale (以左上角为锚点) ──────────────────────────────────
+// ─── Double-click fullscreen within canvas area ───────────────────────────────
+const isFullscreen = ref(false)
+
+function onDblClick() {
+  isFullscreen.value = !isFullscreen.value
+  // Sync fullscreen size to store so mixer mirrors it
+  if (isFullscreen.value) {
+    const container = (videoEl.value?.closest('.app-layout__canvas-wrap') as HTMLElement) ?? null
+    if (container) {
+      const { width, height } = container.getBoundingClientRect()
+      mediaStore.updateCameraPip({ x: 0, y: 0, w: Math.round(width), h: Math.round(height) })
+    }
+  } else {
+    mediaStore.updateCameraPip({ x: pos.value.x, y: pos.value.y, w: size.value.w, h: size.value.h })
+  }
+}
+
 function onWheel(e: WheelEvent) {
-  e.preventDefault()
   const delta = -e.deltaY * 0.3
   const newW = Math.min(MAX_W, Math.max(MIN_W, size.value.w + delta))
   const deltaW = newW - size.value.w
@@ -107,9 +123,11 @@ function onWheel(e: WheelEvent) {
   <div
     v-if="mediaStore.isCameraOn && mediaStore.isCameraVisible && mediaStore.cameraStream"
     class="camera-pip no-select"
-    :style="{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: `${size.w}px`, height: `${size.h}px` }"
+    :class="{ 'camera-pip--fullscreen': isFullscreen }"
+    :style="isFullscreen ? {} : { transform: `translate(${pos.x}px, ${pos.y}px)`, width: `${size.w}px`, height: `${size.h}px` }"
     @mousedown="onMouseDown"
-    @wheel.passive="onWheel"
+    @dblclick.stop="onDblClick"
+    @wheel.prevent="onWheel"
   >
     <video
       ref="videoEl"
@@ -205,5 +223,19 @@ function onWheel(e: WheelEvent) {
   }
 
   &:hover &__resize { opacity: 1; }
+
+  // Fullscreen within canvas container
+  &--fullscreen {
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    transform: none !important;
+    border-radius: 0;
+    z-index: 30;
+    cursor: default;
+  }
 }
 </style>

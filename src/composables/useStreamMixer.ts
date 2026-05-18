@@ -1,6 +1,7 @@
 import { ref, shallowRef } from 'vue'
 import { useMediaStore } from '@/stores/mediaStore'
 import { useCoStreamStore } from '@/stores/coStreamStore'
+import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { computeCoStreamLayout } from '@/utils/coStreamLayout'
 
 /**
@@ -10,6 +11,7 @@ import { computeCoStreamLayout } from '@/utils/coStreamLayout'
 export function useStreamMixer() {
   const mediaStore    = useMediaStore()
   const coStreamStore = useCoStreamStore()
+  const wbStore       = useWhiteboardStore()
 
   const outputCanvas = shallowRef<HTMLCanvasElement | null>(null)
   const outputStream = shallowRef<MediaStream | null>(null)
@@ -19,7 +21,9 @@ export function useStreamMixer() {
   let screenVideo: HTMLVideoElement | null = null
   /** peerId → HTMLVideoElement */
   const participantVideos = new Map<string, HTMLVideoElement>()
-  let animFrameId = 0
+  let drawTimer = 0
+  const TARGET_FPS = 30
+  const FRAME_MS   = 1000 / TARGET_FPS
 
   function createVideoEl(stream: MediaStream): HTMLVideoElement {
     const v = document.createElement('video')
@@ -31,7 +35,12 @@ export function useStreamMixer() {
     return v
   }
 
-  function start(whiteboardCanvas: HTMLCanvasElement, width = 1280, height = 720): MediaStream {
+  function start(
+    whiteboardCanvas: HTMLCanvasElement,
+    width = 1280,
+    height = 720,
+    docCanvasGetter: () => HTMLCanvasElement | null = () => null,
+  ): MediaStream {
     if (isRunning.value) stop()
     const canvas = document.createElement('canvas')
     canvas.width  = width
@@ -41,6 +50,14 @@ export function useStreamMixer() {
 
     isRunning.value = true
 
+    // Pre-create screenVideo so it's ready before the first frame
+    if (mediaStore.isScreenSharing && mediaStore.screenStream) {
+      screenVideo = createVideoEl(mediaStore.screenStream)
+    }
+    if (mediaStore.isCameraOn && mediaStore.cameraStream) {
+      camVideo = createVideoEl(mediaStore.cameraStream)
+    }
+
     function draw() {
       if (!isRunning.value) return
 
@@ -49,7 +66,40 @@ export function useStreamMixer() {
       ctx.fillRect(0, 0, width, height)
 
       // 2. Whiteboard / document content
-      try { ctx.drawImage(whiteboardCanvas, 0, 0, width, height) } catch { /* not ready */ }
+      if (wbStore.activeMode === 'document') {
+        // Document mode: render PDF page canvas (object-fit:contain with dark bg)
+        const docCanvas = docCanvasGetter()
+        if (docCanvas) {
+          try {
+            ctx.fillStyle = '#2a2a2a'
+            ctx.fillRect(0, 0, width, height)
+            // Scale PDF canvas to fit output maintaining aspect ratio
+            const dw = docCanvas.width
+            const dh = docCanvas.height
+            const scale = Math.min(width / dw, height / dh)
+            const dstW  = Math.round(dw * scale)
+            const dstH  = Math.round(dh * scale)
+            const dstX  = Math.round((width  - dstW) / 2)
+            const dstY  = Math.round((height - dstH) / 2)
+            ctx.drawImage(docCanvas, dstX, dstY, dstW, dstH)
+          } catch { /* not ready */ }
+        }
+        // Also draw whiteboard annotation overlay on top of PDF
+        try { ctx.drawImage(whiteboardCanvas, 0, 0, width, height) } catch { /* not ready */ }
+      } else {
+        // Whiteboard / screen-share mode
+        // Fabric.js uses two stacked canvases:
+        //   lower-canvas — committed strokes and objects
+        //   upper-canvas — in-progress drawing preview (active path during freehand)
+        // We must draw both or the live stroke won't appear in the stream.
+        try { ctx.drawImage(whiteboardCanvas, 0, 0, width, height) } catch { /* not ready */ }
+        try {
+          const upperCanvas = whiteboardCanvas.nextElementSibling as HTMLCanvasElement | null
+          if (upperCanvas?.tagName === 'CANVAS') {
+            ctx.drawImage(upperCanvas, 0, 0, width, height)
+          }
+        } catch { /* upper canvas not ready */ }
+      }
 
       // 3. Screen share (full overlay when active)
       if (mediaStore.isScreenSharing && mediaStore.screenStream) {
@@ -143,27 +193,55 @@ export function useStreamMixer() {
           const pw = Math.round(pip.w   * scaleX)
           const ph = Math.round(pip.h   * scaleY)
 
-          // Draw horizontally flipped (mirrors the CSS scaleX(-1) on the <video>)
+          // Draw with object-fit:cover to avoid stretching non-16:9 cameras
+          const vw = camVideo.videoWidth  || pw
+          const vh = camVideo.videoHeight || ph
+          const videoAspect  = vw / vh
+          const targetAspect = pw / ph
+          let sx: number, sy: number, sw: number, sh: number
+          if (videoAspect > targetAspect) {
+            // Video is wider — crop left/right
+            sh = vh
+            sw = sh * targetAspect
+            sx = (vw - sw) / 2
+            sy = 0
+          } else {
+            // Video is taller — crop top/bottom
+            sw = vw
+            sh = sw / targetAspect
+            sx = 0
+            sy = (vh - sh) / 2
+          }
+
+          const radius = 6
+          // Clip to rounded rect — matches CSS border-radius: 8px on CameraPreview
           ctx.save()
+          ctx.beginPath()
+          ctx.roundRect(px, py, pw, ph, radius)
+          ctx.clip()
+          // Draw horizontally flipped (mirrors the CSS scaleX(-1) on the <video>)
           ctx.translate(px + pw, py)
           ctx.scale(-1, 1)
-          ctx.drawImage(camVideo, 0, 0, pw, ph)
+          ctx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, pw, ph)
           ctx.restore()
 
+          // Border — matches CSS border: 2px solid rgba(255,255,255,0.12)
           ctx.strokeStyle = 'rgba(255,255,255,0.3)'
           ctx.lineWidth   = 2
           ctx.beginPath()
-          ctx.roundRect(px, py, pw, ph, 6)
+          ctx.roundRect(px, py, pw, ph, radius)
           ctx.stroke()
         }
       } else {
         camVideo = null
       }
 
-      animFrameId = requestAnimationFrame(draw)
     }
 
-    draw()
+    // Use setInterval instead of rAF+throttle for consistent frame delivery to captureStream.
+    // rAF can be deprioritized by the browser (e.g. when tab is backgrounded or GPU is busy),
+    // causing fixed-interval stutters on the pull side.
+    drawTimer = window.setInterval(draw, FRAME_MS)
 
     // Assemble output stream
     const tracks: MediaStreamTrack[] = []
@@ -194,7 +272,7 @@ export function useStreamMixer() {
 
   function stop() {
     isRunning.value = false
-    cancelAnimationFrame(animFrameId)
+    clearInterval(drawTimer)
     // Only stop the canvas video track — mic tracks belong to mediaStore and must not be stopped here
     outputStream.value?.getVideoTracks().forEach(t => t.stop())
     outputStream.value   = null

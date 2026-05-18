@@ -65,7 +65,7 @@ const coStream = useCoStream()
 // Provide coStream controls to RightPanel
 provide('coStream', coStream)
 const whiteboardCanvasEl = ref<HTMLCanvasElement | null>(null)
-const docViewerRef = ref<{ loadFile: (f: File) => void } | null>(null)
+const docViewerRef = ref<{ loadFile: (f: File) => void; getVisibleCanvas: () => HTMLCanvasElement | null } | null>(null)
 
 function onCanvasDragOver(e: DragEvent) { e.preventDefault() }
 function onCanvasDrop(e: DragEvent) {
@@ -121,7 +121,7 @@ async function handleStartLive() {
     return
   }
 
-  const stream = mixer.start(canvas)
+  const stream = mixer.start(canvas, 1280, 720, () => docViewerRef.value?.getVisibleCanvas() ?? null)
   streamStore.startLive()
 
   try {

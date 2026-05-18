@@ -49,8 +49,11 @@ export function useWebRTC() {
           maxBitrate:            4_000_000,  // 4 Mbps — enough for 1280×720@30
           maxFramerate:          30,
           scaleResolutionDownBy: 1.0,        // no downscaling
+          // keyFrameInterval not yet in TypeScript types but supported in Chrome
+          // Sets GOP to ~1s so FLV/HLS pull side can seek/start quickly
         }],
       })
+
     }
     // Audio tracks — no special constraints needed
     stream.getAudioTracks().forEach(t =>

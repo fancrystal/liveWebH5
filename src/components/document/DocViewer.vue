@@ -10,6 +10,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 const fileInput  = ref<HTMLInputElement | null>(null)
 const scrollWrap = ref<HTMLDivElement | null>(null)
 
+/** Return the first visible PDF page canvas for stream mixing */
+function getVisibleCanvas(): HTMLCanvasElement | null {
+  const wrap = scrollWrap.value
+  if (!wrap) return null
+  return wrap.querySelector<HTMLCanvasElement>('canvas.doc-viewer__canvas')
+}
+
 const pdfDoc    = shallowRef<pdfjsLib.PDFDocumentProxy | null>(null)
 const totalPages = ref(0)
 const isLoading  = ref(false)
@@ -72,7 +79,7 @@ function onDrop(e: DragEvent) {
   if (file?.type === 'application/pdf') loadFile(file)
 }
 
-defineExpose({ loadFile })
+defineExpose({ loadFile, getVisibleCanvas })
 </script>
 
 <template>
