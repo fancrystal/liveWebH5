@@ -5,6 +5,9 @@ import { supportsRTMP } from '@/utils/browser'
 
 const MAX_RECONNECT_ATTEMPTS = 4
 const RECONNECT_BASE_MS      = 3000
+// Restart MediaRecorder every 30 min to prevent WebM timestamp accumulation
+// causing Opus audio parse errors in long-running streams
+const RECORDER_RESTART_MS    = 30 * 60 * 1000
 
 /**
  * RTMP publisher via MediaRecorder → WebSocket → server-side ffmpeg pipeline.
@@ -21,10 +24,44 @@ export function useRTMP() {
 
   const WS_ENDPOINT = import.meta.env.VITE_RTMP_WS_URL ?? 'ws://localhost:8080/rtmp-relay'
 
-  let activeStream:   MediaStream | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let reconnectCount  = 0
-  let stopped         = false
+  let activeStream:    MediaStream | null = null
+  let reconnectTimer:  ReturnType<typeof setTimeout> | null = null
+  let restartTimer:    ReturnType<typeof setTimeout> | null = null
+  let reconnectCount   = 0
+  let stopped          = false
+
+  function startRecorder(stream: MediaStream, socket: WebSocket) {
+    // Stop previous recorder if any (for periodic restarts)
+    if (recorder.value && recorder.value.state !== 'inactive') {
+      recorder.value.stop()
+    }
+
+    const mimeType = getSupportedMimeType()
+    const rec = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: streamStore.config.videoBitrate * 1000,
+      audioBitsPerSecond: streamStore.config.audioBitrate * 1000,
+    })
+    recorder.value = rec
+
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+        socket.send(e.data)
+      }
+    }
+
+    rec.start(100)
+  }
+
+  function scheduleRecorderRestart(stream: MediaStream, socket: WebSocket) {
+    if (restartTimer) clearTimeout(restartTimer)
+    restartTimer = setTimeout(() => {
+      if (stopped || socket.readyState !== WebSocket.OPEN) return
+      // Seamless restart: new recorder picks up immediately
+      startRecorder(stream, socket)
+      scheduleRecorderRestart(stream, socket)
+    }, RECORDER_RESTART_MS)
+  }
 
   function getSupportedMimeType(): string {
     const candidates = [
@@ -47,21 +84,11 @@ export function useRTMP() {
       isConnected.value = true
       reconnectCount    = 0
 
-      const mimeType = getSupportedMimeType()
-      const rec = new MediaRecorder(stream, {
-        mimeType,
-        videoBitsPerSecond: streamStore.config.videoBitrate * 1000,
-        audioBitsPerSecond: streamStore.config.audioBitrate * 1000,
-      })
-      recorder.value = rec
+      startRecorder(stream, socket)
 
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(e.data)
-        }
-      }
-
-      rec.start(100)
+      // Periodically restart MediaRecorder to reset WebM timestamps,
+      // preventing Opus audio corruption in long-running streams
+      scheduleRecorderRestart(stream, socket)
     }
 
     socket.onerror = () => {
@@ -118,6 +145,7 @@ export function useRTMP() {
   function stop() {
     stopped = true
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+    if (restartTimer)   { clearTimeout(restartTimer);   restartTimer   = null }
     recorder.value?.stop()
     ws.value?.close()
     recorder.value    = null
