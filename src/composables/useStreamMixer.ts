@@ -21,7 +21,9 @@ export function useStreamMixer() {
   let screenVideo: HTMLVideoElement | null = null
   /** peerId → HTMLVideoElement */
   const participantVideos = new Map<string, HTMLVideoElement>()
-  let drawTimer = 0
+  // Use a Web Worker for the draw timer so Chrome background-tab throttling
+  // (which slows setInterval to ~1s in hidden tabs) doesn't drop stream framerate.
+  let drawWorker: Worker | null = null
   const TARGET_FPS = 30
   const FRAME_MS   = 1000 / TARGET_FPS
 
@@ -238,10 +240,13 @@ export function useStreamMixer() {
 
     }
 
-    // Use setInterval instead of rAF+throttle for consistent frame delivery to captureStream.
-    // rAF can be deprioritized by the browser (e.g. when tab is backgrounded or GPU is busy),
-    // causing fixed-interval stutters on the pull side.
-    drawTimer = window.setInterval(draw, FRAME_MS)
+    // Use a Web Worker timer instead of setInterval/rAF.
+    // Chrome throttles both to ~1s intervals when the tab is hidden (background tab),
+    // which causes the stream to drop to ~1fps overnight or when the page is not focused.
+    // Web Workers run at full speed regardless of tab visibility.
+    drawWorker = new Worker('/timer-worker.js')
+    drawWorker.onmessage = (e) => { if (e.data.type === 'tick') draw() }
+    drawWorker.postMessage({ type: 'start', interval: FRAME_MS })
 
     // Assemble output stream
     const tracks: MediaStreamTrack[] = []
@@ -272,7 +277,11 @@ export function useStreamMixer() {
 
   function stop() {
     isRunning.value = false
-    clearInterval(drawTimer)
+    if (drawWorker) {
+      drawWorker.postMessage({ type: 'stop' })
+      drawWorker.terminate()
+      drawWorker = null
+    }
     // Only stop the canvas video track — mic tracks belong to mediaStore and must not be stopped here
     outputStream.value?.getVideoTracks().forEach(t => t.stop())
     outputStream.value   = null
