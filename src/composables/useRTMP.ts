@@ -22,7 +22,10 @@ export function useRTMP() {
   const isConnected = ref(false)
   const error       = ref<string | null>(null)
 
-  const WS_ENDPOINT = import.meta.env.VITE_RTMP_WS_URL ?? 'ws://localhost:8080/rtmp-relay'
+  // WS_ENDPOINT 优先用 .env 配置；未配置时自动用当前页面 host
+  // 这样生产环境的 https 页面会自动用 wss:// 避免 Mixed Content
+  const WS_ENDPOINT = import.meta.env.VITE_RTMP_WS_URL
+    || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/rtmp-relay`
 
   let activeStream:    MediaStream | null = null
   let reconnectTimer:  ReturnType<typeof setTimeout> | null = null
