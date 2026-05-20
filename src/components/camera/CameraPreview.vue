@@ -1,9 +1,34 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onUnmounted, watchEffect } from 'vue'
+import { ref, watch, nextTick, onUnmounted, onMounted, watchEffect } from 'vue'
 import { useMediaStore } from '@/stores/mediaStore'
 
 const mediaStore = useMediaStore()
 const videoEl = ref<HTMLVideoElement | null>(null)
+
+// ─── Canvas container (.app-layout__canvas-wrap) tracking ─────────────────
+// The PiP lives inside this container; we need its live dimensions to
+// translate the on-screen pos/size into percentages the mixer can mirror.
+const containerW = ref(0)
+const containerH = ref(0)
+let resizeObserver: ResizeObserver | null = null
+
+function attachContainerObserver() {
+  const el = document.querySelector('.app-layout__canvas-wrap') as HTMLElement | null
+  if (!el || resizeObserver) return
+  const rect = el.getBoundingClientRect()
+  containerW.value = rect.width
+  containerH.value = rect.height
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      containerW.value = entry.contentRect.width
+      containerH.value = entry.contentRect.height
+    }
+  })
+  resizeObserver.observe(el)
+}
+
+onMounted(() => { attachContainerObserver() })
+onUnmounted(() => { resizeObserver?.disconnect(); resizeObserver = null })
 
 watch(
   () => mediaStore.cameraStream,
@@ -87,28 +112,37 @@ function onResizeUp() {
   window.removeEventListener('mouseup', onResizeUp)
 }
 
-// ─── Sync pos+size to store so useStreamMixer can mirror exact layout ────────
-watchEffect(() => {
-  mediaStore.updateCameraPip({ x: pos.value.x, y: pos.value.y, w: size.value.w, h: size.value.h })
-})
-
 // ─── Scroll wheel to scale (以左上角为锚点) ──────────────────────────────────
 // ─── Double-click fullscreen within canvas area ───────────────────────────────
 const isFullscreen = ref(false)
 
 function onDblClick() {
+  // watchEffect below handles syncing pip percentages based on isFullscreen
   isFullscreen.value = !isFullscreen.value
-  // Sync fullscreen size to store so mixer mirrors it
-  if (isFullscreen.value) {
-    const container = (videoEl.value?.closest('.app-layout__canvas-wrap') as HTMLElement) ?? null
-    if (container) {
-      const { width, height } = container.getBoundingClientRect()
-      mediaStore.updateCameraPip({ x: 0, y: 0, w: Math.round(width), h: Math.round(height) })
-    }
-  } else {
-    mediaStore.updateCameraPip({ x: pos.value.x, y: pos.value.y, w: size.value.w, h: size.value.h })
-  }
 }
+
+// ─── Sync pos+size to store as percentages of container ─────────────────────
+// Mixer uses these percentages × output canvas dimensions, so the PiP keeps
+// its visual proportions regardless of how big/small the UI canvas is.
+watchEffect(() => {
+  const cw = containerW.value
+  const ch = containerH.value
+  if (cw === 0 || ch === 0) return
+  if (isFullscreen.value) {
+    mediaStore.updateCameraPip({ xPct: 0, yPct: 0, wPct: 1, hPct: 1 })
+    return
+  }
+  // CameraPreview default position is `top:10px right:10px`, then
+  // `transform: translate(pos.x, pos.y)`. Convert to left/top px first.
+  const leftPx = cw - 10 - size.value.w + pos.value.x
+  const topPx  = 10 + pos.value.y
+  mediaStore.updateCameraPip({
+    xPct: leftPx        / cw,
+    yPct: topPx         / ch,
+    wPct: size.value.w  / cw,
+    hPct: size.value.h  / ch,
+  })
+})
 
 function onWheel(e: WheelEvent) {
   const delta = -e.deltaY * 0.3

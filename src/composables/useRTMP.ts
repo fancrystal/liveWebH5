@@ -40,6 +40,20 @@ export function useRTMP() {
     }
 
     const mimeType = getSupportedMimeType()
+    // eslint-disable-next-line no-console
+    console.log('[RTMP] startRecorder', {
+      mimeType,
+      videoTracks: stream.getVideoTracks().map(t => ({
+        label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
+        settings: t.getSettings(),
+      })),
+      audioTracks: stream.getAudioTracks().map(t => ({
+        label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
+      })),
+      videoBitrate: streamStore.config.videoBitrate,
+      audioBitrate: streamStore.config.audioBitrate,
+    })
+
     const rec = new MediaRecorder(stream, {
       mimeType,
       videoBitsPerSecond: streamStore.config.videoBitrate * 1000,
@@ -47,10 +61,41 @@ export function useRTMP() {
     })
     recorder.value = rec
 
+    // Throttled chunk-size accumulator
+    let chunkBytes = 0
+    let chunkCount = 0
+    let lastChunkLog = performance.now()
+
     rec.ondataavailable = (e) => {
       if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
         socket.send(e.data)
+        chunkBytes += e.data.size
+        chunkCount += 1
+        const now = performance.now()
+        if (now - lastChunkLog >= 1000) {
+          // eslint-disable-next-line no-console
+          console.log('[RTMP] chunks/s', {
+            chunks: chunkCount,
+            bytes: chunkBytes,
+            kbps: ((chunkBytes * 8) / 1000).toFixed(0),
+            wsBuffered: socket.bufferedAmount,
+          })
+          chunkBytes = 0
+          chunkCount = 0
+          lastChunkLog = now
+        }
+      } else if (e.data.size === 0) {
+        // eslint-disable-next-line no-console
+        console.warn('[RTMP] empty chunk from recorder')
+      } else if (socket.readyState !== WebSocket.OPEN) {
+        // eslint-disable-next-line no-console
+        console.warn('[RTMP] socket not OPEN, dropping chunk', { state: socket.readyState })
       }
+    }
+
+    rec.onerror = (e) => {
+      // eslint-disable-next-line no-console
+      console.error('[RTMP] MediaRecorder error', e)
     }
 
     rec.start(100)
@@ -80,10 +125,15 @@ export function useRTMP() {
     if (!rtmpUrl) { error.value = 'RTMP 推流地址未配置'; return }
 
     const url    = `${WS_ENDPOINT}?rtmp=${encodeURIComponent(rtmpUrl)}`
+    // eslint-disable-next-line no-console
+    console.log('[RTMP] connecting WS', { url })
     const socket = new WebSocket(url)
+    socket.binaryType = 'arraybuffer'
     ws.value     = socket
 
     socket.onopen = () => {
+      // eslint-disable-next-line no-console
+      console.log('[RTMP] WS open')
       isConnected.value = true
       reconnectCount    = 0
 
@@ -94,11 +144,15 @@ export function useRTMP() {
       scheduleRecorderRestart(stream, socket)
     }
 
-    socket.onerror = () => {
+    socket.onerror = (e) => {
+      // eslint-disable-next-line no-console
+      console.error('[RTMP] WS error', e)
       error.value = 'WebSocket 连接失败'
     }
 
     socket.onclose = (e) => {
+      // eslint-disable-next-line no-console
+      console.warn('[RTMP] WS close', { code: e.code, reason: e.reason, wasClean: e.wasClean })
       isConnected.value = false
       recorder.value?.stop()
       recorder.value = null

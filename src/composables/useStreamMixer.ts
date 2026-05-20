@@ -27,6 +27,11 @@ export function useStreamMixer() {
   const TARGET_FPS = 30
   const FRAME_MS   = 1000 / TARGET_FPS
 
+  // ---- Diagnostic logging (throttled to ~1Hz) ----
+  let tickCount   = 0
+  let lastLogTime = 0
+  const LOG_INTERVAL_MS = 1000
+
   function createVideoEl(stream: MediaStream): HTMLVideoElement {
     const v = document.createElement('video')
     v.srcObject = stream
@@ -60,8 +65,47 @@ export function useStreamMixer() {
       camVideo = createVideoEl(mediaStore.cameraStream)
     }
 
+    // eslint-disable-next-line no-console
+    console.log('[Mixer] start()', {
+      output: { width, height },
+      whiteboardCanvas: {
+        width: whiteboardCanvas.width,
+        height: whiteboardCanvas.height,
+        clientWidth: whiteboardCanvas.clientWidth,
+        clientHeight: whiteboardCanvas.clientHeight,
+      },
+      hasCamera: mediaStore.isCameraOn,
+      hasScreen: mediaStore.isScreenSharing,
+      hasMic: !!mediaStore.micStream,
+    })
+
     function draw() {
       if (!isRunning.value) return
+      tickCount++
+
+      // Throttled diagnostic snapshot (once per second)
+      const now = performance.now()
+      const shouldLog = now - lastLogTime >= LOG_INTERVAL_MS
+      if (shouldLog) {
+        lastLogTime = now
+        // eslint-disable-next-line no-console
+        console.log('[Mixer] tick', {
+          ticks: tickCount,
+          mode: wbStore.activeMode,
+          wbCanvas: { w: whiteboardCanvas.width, h: whiteboardCanvas.height },
+          cam: camVideo ? {
+            ready: camVideo.readyState,
+            vw: camVideo.videoWidth,
+            vh: camVideo.videoHeight,
+          } : null,
+          screen: screenVideo ? {
+            ready: screenVideo.readyState,
+            vw: screenVideo.videoWidth,
+            vh: screenVideo.videoHeight,
+          } : null,
+          guests: coStreamStore.participantList.length,
+        })
+      }
 
       // 1. White background
       ctx.fillStyle = '#ffffff'
@@ -178,22 +222,24 @@ export function useStreamMixer() {
           camVideo = createVideoEl(mediaStore.cameraStream)
         }
         if (camVideo.readyState >= 2) {
-          // whiteboardCanvas.width/height = actual screen px of the canvas area
-          const canvasW = whiteboardCanvas.width  || width
-          const canvasH = whiteboardCanvas.height || height
-          const scaleX  = width  / canvasW
-          const scaleY  = height / canvasH
+          // mediaStore.cameraPip is stored as percentages of the UI canvas
+          // container, so multiplying by output dimensions yields a PiP that
+          // mirrors the UI proportions regardless of UI canvas size.
+          const pip = mediaStore.cameraPip
+          const px  = Math.round(pip.xPct * width)
+          const py  = Math.round(pip.yPct * height)
+          const pw  = Math.round(pip.wPct * width)
+          const ph  = Math.round(pip.hPct * height)
 
-          // CameraPreview.vue CSS default: top:10px right:10px
-          // pos.x/y is the translate offset from that default position
-          const pip     = mediaStore.cameraPip
-          const screenL = canvasW - 10 - pip.w + pip.x   // left edge in screen px
-          const screenT = 10 + pip.y                       // top  edge in screen px
-
-          const px = Math.round(screenL * scaleX)
-          const py = Math.round(screenT * scaleY)
-          const pw = Math.round(pip.w   * scaleX)
-          const ph = Math.round(pip.h   * scaleY)
+          if (shouldLog) {
+            // eslint-disable-next-line no-console
+            console.log('[Mixer] cam PiP', {
+              outputWH: { w: width, h: height },
+              pip,
+              dst: { px, py, pw, ph },
+              warn: (pw > width * 0.6 || ph > height * 0.6) ? 'PIP_TOO_LARGE' : undefined,
+            })
+          }
 
           // Draw with object-fit:cover to avoid stretching non-16:9 cameras
           const vw = camVideo.videoWidth  || pw

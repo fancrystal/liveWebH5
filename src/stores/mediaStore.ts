@@ -13,12 +13,16 @@ export const useMediaStore = defineStore('media', () => {
   const isCameraVisible = ref(true)  // PiP window visibility
 
   /**
-   * Camera PiP layout state — shared between CameraPreview.vue and useStreamMixer.
-   * pos: translate offset from the CSS default position (top:10px right:10px)
-   * size: current pip dimensions in screen pixels
+   * Camera PiP layout — stored as percentages of the UI canvas container so the
+   * mixer can apply the same proportions to the output canvas regardless of its
+   * UI size. CameraPreview.vue is responsible for converting screen pixels to
+   * percentages (see CameraPreview's watchEffect block).
+   *
+   * Defaults position the PiP roughly at the top-right corner, ~22% width.
    */
-  const cameraPip = ref({ x: 0, y: 0, w: 224, h: 126 })
-  function updateCameraPip(patch: Partial<{ x: number; y: number; w: number; h: number }>) {
+  interface CameraPipPct { xPct: number; yPct: number; wPct: number; hPct: number }
+  const cameraPip = ref<CameraPipPct>({ xPct: 0.77, yPct: 0.015, wPct: 0.22, hPct: 0.124 })
+  function updateCameraPip(patch: Partial<CameraPipPct>) {
     cameraPip.value = { ...cameraPip.value, ...patch }
   }
 
