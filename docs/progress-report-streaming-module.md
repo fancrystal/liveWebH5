@@ -93,21 +93,22 @@ flowchart TD
 ### 2.3 弱网自适应码率状态机
 
 ```mermaid
-stateDiagram-v2
-    [*] --> good: 建立连接
+flowchart TD
+    START([建立连接]) --> GOOD
 
-    good --> degraded: 连续2次采样：丢包率大于2% 或 RTT大于100ms
-    degraded --> good: 连续2次采样：丢包率小于2% 且 RTT小于100ms
-    degraded --> poor: 连续2次采样：丢包率大于10% 或 RTT大于300ms
-    poor --> degraded: 连续2次采样：丢包率小于10% 且 RTT小于300ms
+    GOOD["good\n码率 100%  全帧率"]
+    DEGRADED["degraded\n码率 60%  全帧率\nsender.setParameters 原地调整"]
+    POOR["poor\n码率 30%  最高 15fps\nsender.setParameters 原地调整"]
+    RECON(["重连中\n指数退避 3→6→12→24s"])
+    DONE([结束])
 
-    good: good\n码率 100% 全帧率
-    degraded: degraded\n码率 60% 全帧率\nsender.setParameters() 原地调整
-    poor: poor\n码率 30% 最高15fps\nsender.setParameters() 原地调整
-
-    poor --> reconnecting: ICE disconnected超过5s 或 connectionState=failed
-    reconnecting --> good: 重连成功 / ICE 自愈
-    reconnecting --> [*]: 重连4次失败
+    GOOD -->|"连续2次：丢包>2% 或 RTT>100ms"| DEGRADED
+    DEGRADED -->|"连续2次：丢包<2% 且 RTT<100ms"| GOOD
+    DEGRADED -->|"连续2次：丢包>10% 或 RTT>300ms"| POOR
+    POOR -->|"连续2次：丢包<10% 且 RTT<300ms"| DEGRADED
+    POOR -->|"ICE disconnected 超过5s 或 failed"| RECON
+    RECON -->|"重连成功 / ICE 自愈"| GOOD
+    RECON -->|"重连4次失败"| DONE
 ```
 
 ### 2.4 ICE 断线自愈流程
@@ -177,26 +178,27 @@ sequenceDiagram
 ### 3.2 背压控制与弱网策略（状态图）
 
 ```mermaid
-stateDiagram-v2
-    [*] --> good: WS 连接建立
+flowchart TD
+    START([WS 连接建立]) --> GOOD
 
-    good: good\nbufferedAmount 小于 64KB\n正常发送所有帧
-    degraded: degraded\n64KB 到 2MB\n发送但警告用户
-    poor: poor\n大于 2MB\n丢弃当前帧
-    recovery: 恢复重连\nbufferedAmount大于2MB持续8s
+    GOOD["good\nbufferedAmount 小于 64KB\n正常发送所有帧"]
+    DEGRADED["degraded\n64KB ~ 512KB\n发送但警告用户"]
+    POOR["poor\n大于 2MB\n丢弃当前帧"]
+    RECOVERY["recovery 重连\n持续 poor 超过 8s\n清空 TCP 积压缓冲"]
+    RECON["unexpect 重连\n指数退避 3→6→12→24s"]
+    DONE([结束])
 
-    good --> degraded: bufferedAmount 超过 512KB
-    degraded --> good: bufferedAmount 低于 64KB
-    degraded --> poor: bufferedAmount 超过 2MB
-    poor --> degraded: bufferedAmount 低于 2MB
-    poor --> recovery: 持续超过8s 且 距上次重连超过60s
+    GOOD -->|bufferedAmount 超过 512KB| DEGRADED
+    DEGRADED -->|bufferedAmount 低于 64KB| GOOD
+    DEGRADED -->|bufferedAmount 超过 2MB| POOR
+    POOR -->|bufferedAmount 低于 2MB| DEGRADED
+    POOR -->|"持续超过8s 且 距上次重连超60s"| RECOVERY
+    RECOVERY -->|"重连成功\n新 ffmpeg 进程"| GOOD
+    RECOVERY -->|重连4次失败| DONE
 
-    recovery --> good: 重连成功，新 ffmpeg 进程，清空 TCP 积压缓冲
-    recovery --> [*]: 重连4次失败
-
-    good --> reconnecting: WS 意外断开
-    reconnecting --> good: 指数退避重连成功 3→6→12→24s
-    reconnecting --> [*]: 重连4次失败
+    GOOD -->|WS 意外断开| RECON
+    RECON -->|重连成功| GOOD
+    RECON -->|重连4次失败| DONE
 ```
 
 ### 3.3 30 分钟计划重启对比（时序图）
