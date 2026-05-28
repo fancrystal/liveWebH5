@@ -247,33 +247,36 @@ sequenceDiagram
 | 音视频同步 | RTCP NTP 时间戳自动对齐 | WebM muxer 统一时间轴 |
 | 国内访问 | STUN 需用国内服务器 | 无限制（仅 HTTP/WS） |
 
-### 4.2 WHIP 推流已知卡点
+### 4.2 WHIP 推流待确认疑问点
 
-```mermaid
-flowchart LR
-    subgraph 卡点A["卡点 A：ICE 候选收集失败"]
-        A1["STUN 服务器不可达\nGoogle STUN 被墙"]
-        A2["仅有 host candidate\n对称型 NAT 无法打洞"]
-        A1 --> A3["已修复：切换为 miwifi/qq STUN"]
-        A2 --> A4["待处理：部分运营商对称 NAT\n需配置 TURN 中继服务器"]
-    end
+**疑问点 1：ZLMediaKit 公网暴露的安全性**
 
-    subgraph 卡点B["卡点 B：HTTPS / Mixed Content"]
-        B1["页面 HTTPS\nWHIP 端点 HTTP"]
-        B1 --> B2["浏览器拒绝请求"]
-        B2 --> B3["已修复：服务端启用 HTTPS\n或 nginx 反向代理"]
-    end
+ZLMediaKit 的 WHIP 接口目前直接暴露在公网，任何人只要知道地址就可以向该流媒体服务器推流，存在以下风险：
 
-    subgraph 卡点C["卡点 C：Chrome 自动降分辨率"]
-        C1["弱网时 Chrome BWE\n自动将分辨率降低"]
-        C1 --> C2["已修复：addTransceiver\nscaleResolutionDownBy=1.0"]
-    end
+| 风险 | 描述 | 建议方案 |
+|------|------|---------|
+| 未授权推流 | 外部人员可推流占用带宽和存储 | WHIP 接口加 Token 鉴权（请求头携带 Authorization） |
+| 接口探测 | 服务器端口和服务类型可被扫描识别 | nginx 反向代理，隐藏真实端口，仅暴露 443 |
+| 推流地址泄露 | stream 名称规律可被猜测枚举 | stream 名称使用随机 UUID，后端动态签发 |
+| 无推流频率限制 | 可发起大量连接耗尽服务器资源 | 接入层限制单 IP 并发连接数 |
 
-    subgraph 卡点D["卡点 D：ZLMediaKit 无 ICE 候选"]
-        D1["SDP Answer 不含 candidate 行\nICE 永远无法完成"]
-        D1 --> D2["需服务端配置：\nrtc.externIP = 公网IP\n防火墙放行 UDP 8000"]
-    end
-```
+> **待确认**：当前服务端是否有鉴权机制？是否需要前端在 WHIP 请求头中携带 Token？
+
+---
+
+**疑问点 2：多路同时推流的稳定性**
+
+当前架构下，多个主播同时使用 WHIP 推流到同一个 ZLMediaKit 实例时，存在以下不确定因素：
+
+| 维度 | 问题描述 | 待验证内容 |
+|------|---------|-----------|
+| 服务端并发上限 | ZLMediaKit 单实例支持多少路 WebRTC 并发推流？ | 需压测，通常单核支持 50~100 路 |
+| ICE 端口资源 | 每路 WHIP 连接占用一个 UDP 端口，端口耗尽会拒绝新连接 | 确认 ZLMediaKit 的 UDP 端口范围配置 |
+| 带宽瓶颈 | 每路 2.5Mbps，10 路并发 = 25Mbps 上行 | 确认服务器带宽上限 |
+| 流名冲突 | 两个主播推同名 stream 会互相覆盖 | 流名需由后端统一分配，前端不允许自填 |
+| K8s 横向扩展 | 多个 ZLMediaKit Pod 时，WHIP 请求需要 Session 亲和性路由 | 负载均衡需配置 sticky session |
+
+> **待确认**：目前是单实例部署还是多实例？是否有计划做横向扩展？
 
 ### 4.3 RTMP 推流已知卡点
 
