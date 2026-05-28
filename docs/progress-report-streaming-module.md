@@ -280,30 +280,12 @@ ZLMediaKit 的 WHIP 接口目前直接暴露在公网，任何人只要知道地
 
 ### 4.3 RTMP 推流已知卡点
 
-```mermaid
-flowchart LR
-    subgraph 卡点E["卡点 E：K8s nginx 缓冲卡顿"]
-        E1["nginx proxy_buffering on 默认\nWebM 分片被 nginx 积压批量转发"]
-        E1 --> E2["ffmpeg 收到数据不均匀\n导致 RTMP 输出周期性卡顿"]
-        E2 --> E3["已修复：nginx 配置\nproxy_buffering off\ntcp_nodelay on"]
-    end
-
-    subgraph 卡点F["卡点 F：30分钟 Opus 崩溃"]
-        F1["同 socket 重启 MediaRecorder\nWebM 中途插入新 EBML 头"]
-        F1 --> F2["ffmpeg Opus packet header error\n退出导致断流 1到3秒"]
-        F2 --> F3["已修复：close WS 再新 WS\n新 ffmpeg 接收干净 WebM"]
-    end
-
-    subgraph 卡点G["卡点 G：TCP 积压延迟飙升"]
-        G1["弱网 socket.bufferedAmount 堆积\n观众收到过去内容"]
-        G1 --> G2["已修复：bufferedAmount 超过 2MB\n丢弃当前帧\n持续 8s 触发 recovery 重连"]
-    end
-
-    subgraph 卡点H["卡点 H：Safari 不支持"]
-        H1["Safari MediaRecorder\n不支持 h264/vp8 WebM"]
-        H1 --> H2["现状：Safari 降级提示\n切换 WHIP 模式"]
-    end
-```
+| 卡点 | 根因 | 状态 | 解决方案 |
+|------|------|------|---------|
+| **K8s nginx 缓冲卡顿** | nginx `proxy_buffering on`（默认），WebM 分片被积压后批量转发，ffmpeg 收到数据不均匀，导致 RTMP 输出周期性卡顿 | ✅ 已修复 | nginx 添加 `proxy_buffering off` + `tcp_nodelay on` |
+| **30分钟 Opus 崩溃** | 同一 WebSocket 上重启 MediaRecorder，ffmpeg 收到中途插入的新 WebM EBML 头，触发 Opus packet header error，断流 1~3s | ✅ 已修复 | 关闭 WS → 500ms 后新 WS → 新 ffmpeg 进程接收干净 WebM |
+| **TCP 积压延迟飙升** | 弱网时 `socket.bufferedAmount` 持续堆积，观众收到的是"过去内容"而非实时画面 | ✅ 已修复 | bufferedAmount 超过 2MB 丢弃当前帧，持续 8s 触发 recovery 重连 |
+| **Safari 不支持** | Safari 的 MediaRecorder 不支持 h264/vp8 WebM 格式 | ⚠️ 已知限制 | 检测到 Safari 时降级提示，引导用户切换 WHIP 模式 |
 
 ---
 
@@ -478,19 +460,6 @@ flowchart TD
     F --> G
 ```
 
-**待开发工作：**
-
-| 功能 | 优先级 | 估时 |
-|------|--------|------|
-| 信令服务端：offer/answer/ice 转发 | P0 | 2 天 |
-| 连麦 UI：申请→同意→上麦完整流程 | P0 | 2 天 |
-| 麦位管理面板（静音/踢出/布局） | P1 | 1.5 天 |
-| useCoStream ICE 换国内 STUN | P1 | 0.5 天 |
-| 观众端连麦页面 | P1 | 3 天 |
-| TURN 服务器接入 | P2 | 1 天 |
-
-**估时：** 前端 7 天 + 服务端 3 天
-
 ---
 
 ## 六、整体剩余工作量评估
@@ -526,34 +495,4 @@ gantt
 
 ---
 
-## 七、本阶段核心技术成果
 
-### 7.1 已解决的关键问题
-
-| 问题 | 根因 | 解决方案 | 状态 |
-|------|------|---------|------|
-| 摄像头 PiP 占满半个画面 | PiP 用白板 canvas 像素计算，UI 收窄时比例失控 | 改为百分比坐标系，与容器解耦 | ✅ |
-| K8s RTMP 周期性卡顿 | nginx `proxy_buffering on` 积压 WebM 分片 | `proxy_buffering off` + `tcp_nodelay on` | ✅ |
-| RTMP 30min Opus 崩溃 | 同 socket 重启 recorder，ffmpeg 收到损坏 WebM | 关闭 WS → 新 WS → 新 ffmpeg 进程 | ✅ |
-| WHIP 持续重连 | Google STUN 国内不可达 | 切换 miwifi/qq STUN | ✅ |
-| Chrome 自动降分辨率 | Chrome BWE 弱网时降分辨率 | `scaleResolutionDownBy: 1.0` | ✅ |
-| 本地开发 RTMP 无法连接 | Vite 没有 `/rtmp-relay` 代理 | Vite proxy WebSocket 转发 | ✅ |
-
-### 7.2 本阶段新增能力
-
-- **RTMP 背压控制**：实时感知 TCP 缓冲状态，超阈值丢帧保实时性，持续拥塞自动 recovery 重连
-- **WebRTC 自适应码率**：RTCP stats 驱动，无需重连原地调整码率和帧率（good/degraded/poor 三档）
-- **ICE 断线自愈**：5s grace period 后才重连，避免 Wi-Fi 切换触发不必要的 SDP 重协商
-- **NetQuality 统一状态**：两种推流模式统一的网络质量模型，向 UI 层暴露 `netQuality` ref
-
----
-
-## 八、风险与依赖
-
-| 风险项 | 影响 | 缓解措施 |
-|--------|------|---------|
-| 信令服务端未开发 | 聊天、连麦、人数均无法上线 | **优先级最高，建议并行启动** |
-| 对称 NAT 穿透 | 部分用户连麦失败（企业网络常见） | 接入 TURN 服务器（coturn） |
-| Safari RTMP 不支持 | iOS 用户无法使用 RTMP 模式 | 默认引导 Safari 用户使用 WHIP 模式 |
-| ZLMediaKit TURN 配置 | 无 TURN 时对称 NAT 连麦失败 | 提前与服务端确认 rtc.externIP 配置 |
-| 多路连麦性能 | 9 路连麦 + 合流 CPU 占用高 | 限制最大连麦路数，4路以上降帧率 |

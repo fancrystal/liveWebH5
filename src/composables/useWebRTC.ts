@@ -117,7 +117,7 @@ export function useWebRTC() {
         // remote-inbound-rtp carries RTCP Receiver Report data:
         //   fractionLost: packets lost / packets expected, scaled 0–255
         //   roundTripTime: seconds (via RTCP SR+RR NTP timestamp comparison)
-        const report = r as Record<string, unknown>
+        const report = r as unknown as Record<string, unknown>
         if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
           lossRate = ((report.fractionLost as number) ?? 0) / 255
           rttMs    = ((report.roundTripTime as number) ?? 0) * 1_000
