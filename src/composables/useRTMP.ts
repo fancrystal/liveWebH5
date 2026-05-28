@@ -27,6 +27,10 @@ export function useRTMP() {
   const WS_ENDPOINT = import.meta.env.VITE_RTMP_WS_URL
     || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/rtmp-relay`
 
+  // Per-second chunk throughput logs are noisy; gate them behind VITE_VERBOSE_LOG.
+  // Lifecycle / error events (connect, open, close, error) are always logged.
+  const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+
   let activeStream:    MediaStream | null = null
   let reconnectTimer:  ReturnType<typeof setTimeout> | null = null
   let restartTimer:    ReturnType<typeof setTimeout> | null = null
@@ -40,19 +44,21 @@ export function useRTMP() {
     }
 
     const mimeType = getSupportedMimeType()
-    // eslint-disable-next-line no-console
-    console.log('[RTMP] startRecorder', {
-      mimeType,
-      videoTracks: stream.getVideoTracks().map(t => ({
-        label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
-        settings: t.getSettings(),
-      })),
-      audioTracks: stream.getAudioTracks().map(t => ({
-        label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
-      })),
-      videoBitrate: streamStore.config.videoBitrate,
-      audioBitrate: streamStore.config.audioBitrate,
-    })
+    if (VERBOSE_LOG) {
+      // eslint-disable-next-line no-console
+      console.log('[RTMP] startRecorder', {
+        mimeType,
+        videoTracks: stream.getVideoTracks().map(t => ({
+          label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
+          settings: t.getSettings(),
+        })),
+        audioTracks: stream.getAudioTracks().map(t => ({
+          label: t.label, enabled: t.enabled, muted: t.muted, readyState: t.readyState,
+        })),
+        videoBitrate: streamStore.config.videoBitrate,
+        audioBitrate: streamStore.config.audioBitrate,
+      })
+    }
 
     const rec = new MediaRecorder(stream, {
       mimeType,
@@ -72,7 +78,7 @@ export function useRTMP() {
         chunkBytes += e.data.size
         chunkCount += 1
         const now = performance.now()
-        if (now - lastChunkLog >= 1000) {
+        if (VERBOSE_LOG && now - lastChunkLog >= 1000) {
           // eslint-disable-next-line no-console
           console.log('[RTMP] chunks/s', {
             chunks: chunkCount,

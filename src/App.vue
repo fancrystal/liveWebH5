@@ -9,6 +9,7 @@ import WhiteboardCanvas from '@/components/whiteboard/WhiteboardCanvas.vue'
 import CameraPreview from '@/components/camera/CameraPreview.vue'
 import StreamSettings from '@/components/stream/StreamSettings.vue'
 import DocViewer from '@/components/document/DocViewer.vue'
+import DocSidebar from '@/components/document/DocSidebar.vue'
 import ScreenSharePreview from '@/components/media/ScreenSharePreview.vue'
 import CoStreamGrid from '@/components/costream/CoStreamGrid.vue'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
@@ -121,7 +122,8 @@ async function handleStartLive() {
     return
   }
 
-  const stream = mixer.start(canvas, 1280, 720, () => docViewerRef.value?.getVisibleCanvas() ?? null)
+  const [resW, resH] = streamStore.config.resolution.split('x').map(Number)
+  const stream = mixer.start(canvas, resW ?? 1280, resH ?? 720, () => docViewerRef.value?.getVisibleCanvas() ?? null)
   streamStore.startLive()
 
   try {
@@ -165,10 +167,13 @@ provide('onOpenSettings', () => { showSettings.value = true })
     <TopBar />
 
     <div class="app-layout__body">
-      <LeftToolbar />
+      <!-- Whiteboard / screen mode: drawing toolbar -->
+      <LeftToolbar v-show="wbStore.activeMode !== 'document'" />
+      <!-- Document mode: doc list + page thumbnail sidebar -->
+      <DocSidebar v-show="wbStore.activeMode === 'document'" />
 
       <div class="app-layout__canvas-area">
-        <WhiteboardTabs />
+        <WhiteboardTabs v-show="wbStore.activeMode !== 'document'" />
         <div class="app-layout__canvas-wrap" @dragover="onCanvasDragOver" @drop="onCanvasDrop">
           <WhiteboardCanvas v-show="wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document'" />
           <ScreenSharePreview v-if="wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />

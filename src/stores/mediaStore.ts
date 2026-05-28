@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { filterRealDevices } from '@/utils/browser'
+import { useStreamStore } from '@/stores/streamStore'
 
 export const useMediaStore = defineStore('media', () => {
+  const streamStore = useStreamStore()
   const cameraStream = ref<MediaStream | null>(null)
   const micStream = ref<MediaStream | null>(null)
   const screenStream = ref<MediaStream | null>(null)
@@ -62,7 +64,10 @@ export const useMediaStore = defineStore('media', () => {
       isMicOn.value = false
     } else {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: activeAudioDeviceId.value || undefined },
+        audio: {
+          deviceId: activeAudioDeviceId.value || undefined,
+          sampleRate: streamStore.config.sampleRate,
+        },
       })
       micStream.value = stream
       isMicOn.value = true
@@ -85,7 +90,12 @@ export const useMediaStore = defineStore('media', () => {
     if (!isMicOn.value) return
     micStream.value?.getAudioTracks().forEach(t => t.stop())
     micStream.value = null
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } })
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: { exact: deviceId },
+        sampleRate: streamStore.config.sampleRate,
+      },
+    })
     micStream.value = stream
   }
 

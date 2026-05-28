@@ -216,12 +216,12 @@ const isLive = computed(() => streamStore.status === 'live')
       <!-- Divider -->
       <div class="bottom-bar__divider" />
 
-      <!-- Whiteboard mode -->
+      <!-- Whiteboard mode: switch to whiteboard; if already active, add a new page -->
       <button
         class="tool-btn"
         :class="{ 'tool-btn--mode': wbStore.activeMode === 'whiteboard' }"
-        :title="t('whiteboard')"
-        @click="wbStore.setActiveMode('whiteboard')"
+        :title="wbStore.activeMode === 'whiteboard' ? t('addWhiteboard') : t('whiteboard')"
+        @click="wbStore.activeMode === 'whiteboard' ? wbStore.addPage() : wbStore.setActiveMode('whiteboard')"
       >
         <span class="tool-btn__icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -4,7 +4,7 @@ export type SignalHandler = (...args: unknown[]) => void
 
 /**
  * Singleton-style wrapper around socket.io for signaling.
- * Used by useSocket composable; can also be used by co-stream logic.
+ * Used by App.vue (connect) and useCoStream (WebRTC signal relay).
  */
 export class SignalService {
   private socket: Socket | null = null

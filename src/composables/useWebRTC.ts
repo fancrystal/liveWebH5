@@ -3,8 +3,10 @@ import { useStreamStore } from '@/stores/streamStore'
 import { useToast } from '@/composables/useToast'
 
 const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
+  // China-accessible STUN servers (Google STUN is blocked in mainland China)
+  { urls: 'stun:stun.miwifi.com:3478' },
+  { urls: 'stun:stun.qq.com:3478' },
+  { urls: 'stun:stun.l.google.com:19302' },   // fallback for non-China
 ]
 
 const MAX_RECONNECT_ATTEMPTS = 4
@@ -43,11 +45,12 @@ export function useWebRTC() {
       // 'detail' tells the encoder this is screen/document content,
       // preserving sharpness over motion-smoothing.
       videoTrack.contentHint = 'detail'
+      const { videoBitrate, frameRate } = streamStore.config
       conn.addTransceiver(videoTrack, {
         direction: 'sendonly',
         sendEncodings: [{
-          maxBitrate:            4_000_000,  // 4 Mbps — enough for 1280×720@30
-          maxFramerate:          30,
+          maxBitrate:            videoBitrate * 1000,
+          maxFramerate:          frameRate,
           scaleResolutionDownBy: 1.0,        // no downscaling
           // keyFrameInterval not yet in TypeScript types but supported in Chrome
           // Sets GOP to ~1s so FLV/HLS pull side can seek/start quickly
@@ -55,21 +58,47 @@ export function useWebRTC() {
       })
 
     }
-    // Audio tracks — no special constraints needed
+    // Audio tracks
+    const { audioBitrate } = streamStore.config
     stream.getAudioTracks().forEach(t =>
-      conn.addTransceiver(t, { direction: 'sendonly' }),
+      conn.addTransceiver(t, {
+        direction: 'sendonly',
+        sendEncodings: [{ maxBitrate: audioBitrate * 1000 }],
+      }),
     )
 
     conn.oniceconnectionstatechange = () => {
-      isConnected.value = conn.iceConnectionState === 'connected'
-        || conn.iceConnectionState === 'completed'
+      const state = conn.iceConnectionState
+      // eslint-disable-next-line no-console
+      console.log('[WebRTC] ICE state:', state)
+      isConnected.value = state === 'connected' || state === 'completed'
+      if (state === 'failed') {
+        // Log local & remote ICE candidates for debugging
+        // eslint-disable-next-line no-console
+        console.warn('[WebRTC] ICE failed. Remote candidates may be unreachable.',
+          'Check ZLMediaKit rtc.externIP config and firewall UDP ports.')
+      }
+      if (state === 'disconnected') {
+        // eslint-disable-next-line no-console
+        console.warn('[WebRTC] ICE disconnected — may indicate UDP packet loss or NAT timeout.')
+      }
     }
 
     conn.onconnectionstatechange = () => {
       const s = conn.connectionState
+      // eslint-disable-next-line no-console
+      console.log('[WebRTC] Connection state:', s)
       if ((s === 'failed' || s === 'disconnected') && !stopped) {
         isConnected.value = false
         scheduleReconnect()
+      }
+    }
+
+    // Expose ICE candidate details on connection changes for chrome://webrtc-internals
+    conn.onicecandidate = (e) => {
+      if (e.candidate) {
+        // eslint-disable-next-line no-console
+        console.log('[WebRTC] Local ICE candidate:', e.candidate.candidate)
       }
     }
 
@@ -123,6 +152,17 @@ export function useWebRTC() {
     let answerSdp: string
     try {
       answerSdp = await res.text()
+      // eslint-disable-next-line no-console
+      console.log('[WebRTC] Remote SDP answer received, length:', answerSdp.length)
+      // Log remote ICE candidates from SDP for debugging connectivity
+      const remoteCandidates = answerSdp.match(/a=candidate:.*/g)
+      if (remoteCandidates?.length) {
+        // eslint-disable-next-line no-console
+        console.log('[WebRTC] Remote ICE candidates:', remoteCandidates)
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn('[WebRTC] No ICE candidates found in SDP answer! ZLMediaKit may not be configured for WebRTC properly.')
+      }
       await conn.setRemoteDescription({ type: 'answer', sdp: answerSdp })
     } catch (sdpErr) {
       conn.close()
@@ -135,6 +175,7 @@ export function useWebRTC() {
 
     // After signaling is stable, enforce encoding params again.
     // Some SRS versions may renegotiate and reset the sender parameters.
+    const { videoBitrate: vbr, frameRate: fps } = streamStore.config
     conn.onsignalingstatechange = async () => {
       if (conn.signalingState !== 'stable') return
       for (const sender of conn.getSenders()) {
@@ -143,8 +184,8 @@ export function useWebRTC() {
           const params = sender.getParameters()
           if (!params.encodings?.length) params.encodings = [{}]
           params.encodings.forEach(enc => {
-            enc.maxBitrate            = 4_000_000
-            enc.maxFramerate          = 30
+            enc.maxBitrate            = vbr * 1000
+            enc.maxFramerate          = fps
             enc.scaleResolutionDownBy = 1.0
           })
           await sender.setParameters(params)

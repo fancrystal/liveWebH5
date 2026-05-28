@@ -2,6 +2,7 @@ import { ref, shallowRef } from 'vue'
 import { useMediaStore } from '@/stores/mediaStore'
 import { useCoStreamStore } from '@/stores/coStreamStore'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
+import { useStreamStore } from '@/stores/streamStore'
 import { computeCoStreamLayout } from '@/utils/coStreamLayout'
 
 /**
@@ -12,6 +13,7 @@ export function useStreamMixer() {
   const mediaStore    = useMediaStore()
   const coStreamStore = useCoStreamStore()
   const wbStore       = useWhiteboardStore()
+  const streamStore   = useStreamStore()
 
   const outputCanvas = shallowRef<HTMLCanvasElement | null>(null)
   const outputStream = shallowRef<MediaStream | null>(null)
@@ -24,10 +26,11 @@ export function useStreamMixer() {
   // Use a Web Worker for the draw timer so Chrome background-tab throttling
   // (which slows setInterval to ~1s in hidden tabs) doesn't drop stream framerate.
   let drawWorker: Worker | null = null
-  const TARGET_FPS = 30
-  const FRAME_MS   = 1000 / TARGET_FPS
 
   // ---- Diagnostic logging (throttled to ~1Hz) ----
+  // Set VITE_VERBOSE_LOG=true in .env to enable the per-tick / per-PiP snapshots.
+  // Lifecycle events (start/stop) are always logged.
+  const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
   let tickCount   = 0
   let lastLogTime = 0
   const LOG_INTERVAL_MS = 1000
@@ -54,6 +57,9 @@ export function useStreamMixer() {
     canvas.height = height
     outputCanvas.value = canvas
     const ctx = canvas.getContext('2d')!
+
+    const TARGET_FPS = streamStore.config.frameRate
+    const FRAME_MS   = 1000 / TARGET_FPS
 
     isRunning.value = true
 
@@ -83,9 +89,9 @@ export function useStreamMixer() {
       if (!isRunning.value) return
       tickCount++
 
-      // Throttled diagnostic snapshot (once per second)
+      // Throttled diagnostic snapshot (once per second, only when verbose)
       const now = performance.now()
-      const shouldLog = now - lastLogTime >= LOG_INTERVAL_MS
+      const shouldLog = VERBOSE_LOG && now - lastLogTime >= LOG_INTERVAL_MS
       if (shouldLog) {
         lastLogTime = now
         // eslint-disable-next-line no-console
@@ -296,7 +302,7 @@ export function useStreamMixer() {
 
     // Assemble output stream
     const tracks: MediaStreamTrack[] = []
-    const videoTrack = canvas.captureStream(30).getVideoTracks()[0]
+    const videoTrack = canvas.captureStream(TARGET_FPS).getVideoTracks()[0]
     if (videoTrack) tracks.push(videoTrack)
     if (mediaStore.micStream) {
       mediaStore.micStream.getAudioTracks().forEach(t => tracks.push(t))
