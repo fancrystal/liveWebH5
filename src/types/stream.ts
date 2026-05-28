@@ -2,6 +2,14 @@ export type StreamMode = 'webrtc' | 'rtmp'
 
 export type LiveStatus = 'preview' | 'live' | 'ended'
 
+/**
+ * Real-time network quality assessed by each push-stream composable.
+ * - good:     low loss, low latency — full bitrate
+ * - degraded: moderate loss/latency — bitrate reduced to ~60%
+ * - poor:     high loss/latency or buffer overflow — bitrate at ~30%, chunks dropped
+ */
+export type NetQuality = 'good' | 'degraded' | 'poor'
+
 export interface StreamConfig {
   mode: StreamMode
   rtmpUrl: string
