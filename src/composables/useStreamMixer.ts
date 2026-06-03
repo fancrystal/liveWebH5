@@ -21,7 +21,6 @@ export function useStreamMixer() {
 
   let camVideo:         HTMLVideoElement | null = null
   let screenVideo:      HTMLVideoElement | null = null
-  let videoInsertVideo: HTMLVideoElement | null = null
   /** peerId → HTMLVideoElement */
   const participantVideos = new Map<string, HTMLVideoElement>()
   // Use a Web Worker for the draw timer so Chrome background-tab throttling
@@ -176,13 +175,8 @@ export function useStreamMixer() {
         && insertEl.readyState >= 2
         && insertEl.videoWidth > 0
 
-      if (insertReady) {
-        videoInsertVideo = insertEl
-        if (insertMode === 'fullscreen') {
-          try { ctx.drawImage(insertEl, 0, 0, width, height) } catch { /* not ready */ }
-        }
-      } else {
-        videoInsertVideo = null
+      if (insertReady && insertMode === 'fullscreen') {
+        try { ctx.drawImage(insertEl, 0, 0, width, height) } catch { /* not ready */ }
       }
 
       // 4. Co-stream participants (adaptive grid at bottom-left)
@@ -385,9 +379,8 @@ export function useStreamMixer() {
     outputStream.value?.getVideoTracks().forEach(t => t.stop())
     outputStream.value   = null
     outputCanvas.value   = null
-    camVideo             = null
-    screenVideo          = null
-    videoInsertVideo     = null
+    camVideo    = null
+    screenVideo = null
     participantVideos.forEach(v => v.remove())
     participantVideos.clear()
   }
