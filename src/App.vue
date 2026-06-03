@@ -14,6 +14,9 @@ import ScreenSharePreview from '@/components/media/ScreenSharePreview.vue'
 import CoStreamGrid from '@/components/costream/CoStreamGrid.vue'
 import ToastNotification from '@/components/ui/ToastNotification.vue'
 import DeviceCheck from '@/components/setup/DeviceCheck.vue'
+import CloudDrivePanel from '@/components/cloud/CloudDrivePanel.vue'
+import VideoInsertBar from '@/components/cloud/VideoInsertBar.vue'
+import VideoInsertPreview from '@/components/cloud/VideoInsertPreview.vue'
 
 import { useStreamStore } from '@/stores/streamStore'
 import { useMediaStore } from '@/stores/mediaStore'
@@ -25,6 +28,7 @@ import { useRTMP } from '@/composables/useRTMP'
 import { useCoStream } from '@/composables/useCoStream'
 import { useNetworkMonitor } from '@/composables/useNetworkMonitor'
 import { useToast } from '@/composables/useToast'
+import { useAudioMixer } from '@/composables/useAudioMixer'
 import { isSafari, supportsRTMP } from '@/utils/browser'
 import { signalService } from '@/services/SignalService'
 import { useRoomStore } from '@/stores/roomStore'
@@ -79,14 +83,21 @@ function onCanvasDrop(e: DragEvent) {
   }
 }
 
-const mixer   = useStreamMixer()
-const webrtc  = useWebRTC()
-const rtmp    = useRTMP()
-const netMon  = useNetworkMonitor()
-const toast   = useToast()
+const mixer      = useStreamMixer()
+const webrtc     = useWebRTC()
+const rtmp       = useRTMP()
+const netMon     = useNetworkMonitor()
+const toast      = useToast()
+const audioMixer = useAudioMixer()
+
+// Cloud drive panel visibility
+const showCloudDrive = ref(false)
 
 // Warn on Safari about RTMP unavailability
 onMounted(() => {
+  // Bootstrap URL params (token, sassUrl, roomId, etc.)
+  roomStore.initFromUrl()
+
   if (isSafari() || !supportsRTMP()) {
     toast.warn('当前浏览器不支持 RTMP 推流，推荐使用 WebRTC (WHIP) 模式')
   }
@@ -97,6 +108,34 @@ onMounted(() => {
   const userId = 'host-' + Date.now()
 
   signalService.connect(signalUrl, { roomId, userId, role: 'host' })
+})
+
+// ── Video insert audio mixing ────────────────────────────────────────────────
+// When a video insert starts, mix the video's audio with the mic and replace
+// the audio track in the output stream so viewers hear both.
+// When the insert ends, restore the plain mic audio track.
+watch(() => mediaStore.isVideoInserting, (inserting) => {
+  if (!inserting) {
+    // Always release the AudioContext — even if streaming hasn't started yet,
+    // otherwise the AudioContext leaks when the user inserts then stops before
+    // clicking "开始直播".
+    audioMixer.stop()
+    // Restore plain mic track only when a stream is active
+    mixer.updateAudio()
+    return
+  }
+
+  // Only wire audio into the output stream if streaming is active
+  const outputStream = mixer.outputStream.value
+  if (!outputStream || !mediaStore.videoInsertEl) return
+
+  const mixedTrack = audioMixer.mix(
+    mediaStore.micStream,
+    mediaStore.videoInsertEl as HTMLVideoElement,
+  )
+  // Swap old audio tracks for the mixed track
+  outputStream.getAudioTracks().forEach(t => outputStream.removeTrack(t))
+  if (mixedTrack) outputStream.addTrack(mixedTrack)
 })
 
 // Start / stop network monitoring alongside WebRTC
@@ -123,7 +162,13 @@ async function handleStartLive() {
   }
 
   const [resW, resH] = streamStore.config.resolution.split('x').map(Number)
-  const stream = mixer.start(canvas, resW ?? 1280, resH ?? 720, () => docViewerRef.value?.getVisibleCanvas() ?? null)
+  const stream = mixer.start(
+    canvas,
+    resW ?? 1280,
+    resH ?? 720,
+    () => docViewerRef.value?.getVisibleCanvas() ?? null,
+    () => mediaStore.videoInsertEl,
+  )
   streamStore.startLive()
 
   try {
@@ -180,9 +225,11 @@ provide('onOpenSettings', () => { showSettings.value = true })
           <DocViewer ref="docViewerRef" v-show="wbStore.activeMode === 'document'" />
           <!-- Co-stream participant grid overlay (always visible when there are guests) -->
           <CoStreamGrid v-if="coStreamStore.participantCount > 0" />
+          <!-- Video insert UI preview (PiP or fullscreen overlay in canvas area) -->
+          <VideoInsertPreview />
           <CameraPreview />
         </div>
-        <BottomBar />
+        <BottomBar @open-cloud-drive="showCloudDrive = true" />
       </div>
 
       <RightPanel />
@@ -192,6 +239,15 @@ provide('onOpenSettings', () => { showSettings.value = true })
       v-model:visible="showSettings"
       @apply="() => {}"
     />
+
+    <!-- Cloud drive file picker -->
+    <CloudDrivePanel
+      v-if="showCloudDrive"
+      @close="showCloudDrive = false"
+    />
+
+    <!-- Floating control bar shown while a video insert is active -->
+    <VideoInsertBar />
 
     <ToastNotification />
   </div>

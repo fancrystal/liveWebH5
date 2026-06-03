@@ -1,0 +1,16 @@
+{
+  "name": "live-assistant-signal-server",
+  "version": "1.0.0",
+  "description": "Socket.io signaling server for live assistant H5",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

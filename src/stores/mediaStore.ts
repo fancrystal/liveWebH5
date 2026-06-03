@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { filterRealDevices } from '@/utils/browser'
 import { useStreamStore } from '@/stores/streamStore'
+import type { CloudFile, VideoInsertMode } from '@/types/cloudDrive'
 
 export const useMediaStore = defineStore('media', () => {
   const streamStore = useStreamStore()
@@ -118,6 +119,150 @@ export const useMediaStore = defineStore('media', () => {
     isCameraVisible.value = !isCameraVisible.value
   }
 
+  // ── Video insert (cloud drive playback) ────────────────────────────────────
+  /** The <video> element currently playing the inserted video. */
+  const videoInsertEl   = ref<HTMLVideoElement | null>(null)
+  /** Current insert display mode. */
+  const videoInsertMode = ref<VideoInsertMode>('pip')
+  /** The cloud file being inserted, or null when not inserting. */
+  const videoInsertFile = ref<CloudFile | null>(null)
+  /** Whether a video insert is currently active. */
+  const isVideoInserting = ref(false)
+
+  /**
+   * Video insert PiP layout — stored as percentages of the UI canvas container,
+   * exactly like cameraPip, so the StreamMixer can use the same proportions on
+   * the output canvas regardless of resolution.
+   * Default: bottom-right corner, ~30% width, auto height (set by VideoInsertPreview).
+   */
+  interface VideoPipPct { xPct: number; yPct: number; wPct: number; hPct: number }
+  const videoPip = ref<VideoPipPct>({ xPct: 0.68, yPct: 0.65, wPct: 0.30, hPct: 0.17 })
+  function updateVideoPip(patch: Partial<VideoPipPct>) {
+    videoPip.value = { ...videoPip.value, ...patch }
+  }
+
+  /**
+   * Start inserting a cloud video into the stream.
+   * Creates a hidden <video> element that the StreamMixer will draw from.
+   */
+  function startVideoInsert(file: CloudFile, mode: VideoInsertMode = 'pip') {
+    // Tear down the previous element first, detaching the onended hook before
+    // stopping to avoid a re-entrant stopVideoInsert() call from the old element.
+    const old = videoInsertEl.value
+    if (old) {
+      old.onended = null
+      old.pause()
+      old.src = ''
+      old.remove()
+      videoInsertEl.value = null
+    }
+    isVideoInserting.value = false
+
+    const v = document.createElement('video')
+    // crossOrigin MUST be set before src to prevent canvas tainting.
+    // Setting src first triggers a CORS-unaware request; drawImage on the
+    // resulting canvas will throw SecurityError on captureStream().
+    v.crossOrigin = 'anonymous'
+    v.src         = file.downloadUrl
+    v.autoplay    = true
+    v.muted       = false          // audio is routed through useAudioMixer
+    v.playsInline = true
+    v.loop        = false
+    // Hidden from UI — the preview component (VideoInsertPreview.vue) renders its
+    // own <video> with the same src URL.  ctx.drawImage() works fine with
+    // display:none elements so the mixer is unaffected.
+    v.style.display = 'none'
+    document.body.appendChild(v)
+    v.play().catch(() => {})
+
+    // Do NOT auto-stop on ended — let the video pause on the last frame.
+    // The user closes it manually via the "停止插播" button.
+
+    videoInsertEl.value    = v
+    videoInsertMode.value  = mode
+    videoInsertFile.value  = file
+    isVideoInserting.value = true
+  }
+
+  // Track blob URL so we can revoke it when the insert ends
+  let _blobUrl: string | null = null
+
+  /** Stop the current video insert and clean up the <video> element. */
+  function stopVideoInsert() {
+    if (videoInsertEl.value) {
+      videoInsertEl.value.pause()
+      videoInsertEl.value.src = ''
+      videoInsertEl.value.remove()
+      videoInsertEl.value = null
+    }
+    // Revoke blob URL to free memory (only set when using local file insert)
+    if (_blobUrl) {
+      URL.revokeObjectURL(_blobUrl)
+      _blobUrl = null
+    }
+    videoInsertFile.value  = null
+    isVideoInserting.value = false
+  }
+
+  /**
+   * Insert a local File (e.g. mp4 dragged or picked by the user) into the stream.
+   * Uses createObjectURL so no upload or network is needed — great for testing
+   * the insert pipeline before the cloud drive API is wired up.
+   */
+  function startLocalFileInsert(file: File, mode: VideoInsertMode = 'pip') {
+    // Revoke any previous blob URL first
+    if (_blobUrl) { URL.revokeObjectURL(_blobUrl); _blobUrl = null }
+
+    const blobUrl = URL.createObjectURL(file)
+    _blobUrl = blobUrl
+
+    // Reuse startVideoInsert logic by constructing a minimal CloudFile-like object
+    const localCloudFile: CloudFile = {
+      id:          `local-${Date.now()}`,
+      name:        file.name,
+      type:        'video',
+      downloadUrl: blobUrl,
+      coverUrl:    '',
+      duration:    '',
+      size:        `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+      width:       0,
+      height:      0,
+      mediaType:   file.type,
+      creatorName: '',
+      createTime:  '',
+    }
+
+    // For local blob URLs, crossOrigin must NOT be set (blob URLs are same-origin,
+    // setting crossOrigin causes a CORS preflight that always fails for blob URLs).
+    const old = videoInsertEl.value
+    if (old) { old.onended = null; old.pause(); old.src = ''; old.remove(); videoInsertEl.value = null }
+    isVideoInserting.value = false
+
+    const v = document.createElement('video')
+    // Do NOT set crossOrigin for blob: URLs — they are same-origin by definition
+    v.src         = blobUrl
+    v.autoplay    = true
+    v.muted       = false
+    v.playsInline = true
+    v.loop        = false
+    // Off-screen (not display:none) so captureStream() produces real frames
+    v.style.display = 'none'
+    document.body.appendChild(v)
+    v.play().catch(() => {})
+
+    // Do NOT auto-stop on ended — pause on last frame, user closes manually.
+
+    videoInsertEl.value    = v
+    videoInsertMode.value  = mode
+    videoInsertFile.value  = localCloudFile
+    isVideoInserting.value = true
+  }
+
+  /** Toggle between fullscreen and pip modes during an active insert. */
+  function switchVideoInsertMode() {
+    videoInsertMode.value = videoInsertMode.value === 'pip' ? 'fullscreen' : 'pip'
+  }
+
   return {
     cameraStream, micStream, screenStream,
     isCameraOn, isMicOn, isScreenSharing, isCameraVisible,
@@ -125,5 +270,9 @@ export const useMediaStore = defineStore('media', () => {
     cameraPip, updateCameraPip,
     loadDevices, toggleCamera, toggleMic, switchCamera, switchMic,
     startScreenShare, stopScreenShare, toggleCameraVisibility,
+    // video insert
+    videoInsertEl, videoInsertMode, videoInsertFile, isVideoInserting,
+    startVideoInsert, startLocalFileInsert, stopVideoInsert, switchVideoInsertMode,
+    videoPip, updateVideoPip,
   }
 })

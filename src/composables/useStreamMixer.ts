@@ -19,8 +19,9 @@ export function useStreamMixer() {
   const outputStream = shallowRef<MediaStream | null>(null)
   const isRunning    = ref(false)
 
-  let camVideo:    HTMLVideoElement | null = null
-  let screenVideo: HTMLVideoElement | null = null
+  let camVideo:         HTMLVideoElement | null = null
+  let screenVideo:      HTMLVideoElement | null = null
+  let videoInsertVideo: HTMLVideoElement | null = null
   /** peerId → HTMLVideoElement */
   const participantVideos = new Map<string, HTMLVideoElement>()
   // Use a Web Worker for the draw timer so Chrome background-tab throttling
@@ -50,6 +51,7 @@ export function useStreamMixer() {
     width = 1280,
     height = 720,
     docCanvasGetter: () => HTMLCanvasElement | null = () => null,
+    videoInsertGetter: () => HTMLVideoElement | null = () => null,
   ): MediaStream {
     if (isRunning.value) stop()
     const canvas = document.createElement('canvas')
@@ -165,6 +167,24 @@ export function useStreamMixer() {
         screenVideo = null
       }
 
+      // 3.5 Video insert — FULLSCREEN mode only
+      // Drawn here so it covers whiteboard/screen-share but stays UNDER
+      // co-stream participants (step 4) and camera PiP (step 5).
+      const insertEl   = videoInsertGetter()
+      const insertMode = mediaStore.videoInsertMode
+      const insertReady = insertEl instanceof HTMLVideoElement
+        && insertEl.readyState >= 2
+        && insertEl.videoWidth > 0
+
+      if (insertReady) {
+        videoInsertVideo = insertEl
+        if (insertMode === 'fullscreen') {
+          try { ctx.drawImage(insertEl, 0, 0, width, height) } catch { /* not ready */ }
+        }
+      } else {
+        videoInsertVideo = null
+      }
+
       // 4. Co-stream participants (adaptive grid at bottom-left)
       const guests = coStreamStore.participantList
       if (guests.length > 0) {
@@ -220,6 +240,33 @@ export function useStreamMixer() {
         // Reset text align for subsequent draws
         ctx.textAlign    = 'left'
         ctx.textBaseline = 'alphabetic'
+      }
+
+      // 4.5 Video insert — PIP mode
+      // Drawn AFTER co-stream so it appears on top of participant tiles,
+      // and BEFORE camera PiP so the camera stays the topmost overlay.
+      // Position/size mirrors the UI exactly via mediaStore.videoPip percentages.
+      if (insertReady && insertMode === 'pip') {
+        const vPip = mediaStore.videoPip
+        const pipX = Math.round(vPip.xPct * width)
+        const pipY = Math.round(vPip.yPct * height)
+        const pipW = Math.round(vPip.wPct * width)
+        const pipH = Math.round(vPip.hPct * height)
+        const r    = 8
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.roundRect(pipX, pipY, pipW, pipH, r)
+        ctx.clip()
+        try { ctx.drawImage(insertEl!, pipX, pipY, pipW, pipH) } catch { /* not ready */ }
+        ctx.restore()
+
+        // Border
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+        ctx.lineWidth   = 2
+        ctx.beginPath()
+        ctx.roundRect(pipX, pipY, pipW, pipH, r)
+        ctx.stroke()
       }
 
       // 5. Camera PiP — position/size mirrors the UI exactly
@@ -340,6 +387,7 @@ export function useStreamMixer() {
     outputCanvas.value   = null
     camVideo             = null
     screenVideo          = null
+    videoInsertVideo     = null
     participantVideos.forEach(v => v.remove())
     participantVideos.clear()
   }
