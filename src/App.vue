@@ -65,6 +65,14 @@ const coStreamStore  = useCoStreamStore()
 const roomStore      = useRoomStore()
 const showSettings   = ref(false)
 
+/** Auth bootstrap gate: 'loading' → exchange in flight; 'error' → expired/used link. */
+const authState    = ref<'loading' | 'ready' | 'error'>('loading')
+const authErrorMsg = ref('')
+
+function reloadPage() {
+  window.location.reload()
+}
+
 const coStream = useCoStream()
 
 // Provide coStream controls to RightPanel
@@ -93,10 +101,18 @@ const audioMixer = useAudioMixer()
 // Cloud drive panel visibility
 const showCloudDrive = ref(false)
 
-// Warn on Safari about RTMP unavailability
-onMounted(() => {
-  // Bootstrap URL params (token, sassUrl, roomId, etc.)
-  roomStore.initFromUrl()
+onMounted(async () => {
+  // Exchange the one-time portal code for a session token (or reuse cookie /
+  // dev env fallback). Block the UI until this resolves so an expired link
+  // surfaces immediately instead of after device setup.
+  try {
+    await roomStore.bootstrap()
+    authState.value = 'ready'
+  } catch (e) {
+    authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
+    authState.value = 'error'
+    return  // halt bootstrap — no signaling / device flow without a valid session
+  }
 
   if (isSafari() || !supportsRTMP()) {
     toast.warn('当前浏览器不支持 RTMP 推流，推荐使用 WebRTC (WHIP) 模式')
@@ -206,9 +222,22 @@ provide('onOpenSettings', () => { showSettings.value = true })
 </script>
 
 <template>
-  <DeviceCheck v-if="!deviceCheckDone" @done="handleDeviceCheckDone" />
+  <!-- Auth gate: block until the portal code is exchanged for a token -->
+  <div v-if="authState === 'loading'" class="auth-gate">
+    <div class="auth-gate__spinner" />
+    <p class="auth-gate__text">正在进入直播间…</p>
+  </div>
 
-  <div v-else class="app-layout">
+  <div v-else-if="authState === 'error'" class="auth-gate auth-gate--error">
+    <p class="auth-gate__title">无法进入直播间</p>
+    <p class="auth-gate__text">{{ authErrorMsg }}</p>
+    <button class="auth-gate__btn" @click="reloadPage">刷新页面</button>
+  </div>
+
+  <template v-else>
+    <DeviceCheck v-if="!deviceCheckDone" @done="handleDeviceCheckDone" />
+
+    <div v-else class="app-layout">
     <TopBar />
 
     <div class="app-layout__body">
@@ -250,10 +279,67 @@ provide('onOpenSettings', () => { showSettings.value = true })
     <VideoInsertBar />
 
     <ToastNotification />
-  </div>
+    </div>
+  </template>
 </template>
 
 <style lang="scss" scoped>
+.auth-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  background: $color-bg-dark;
+  color: rgba(255, 255, 255, 0.85);
+
+  &__spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: auth-spin 0.8s linear infinite;
+  }
+
+  &__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  &__text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.65);
+    max-width: 320px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  &__btn {
+    margin-top: 8px;
+    padding: 8px 28px;
+    font-size: 14px;
+    color: #fff;
+    background: #3b82f6;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover { background: #2563eb; }
+    &:active { background: #1d4ed8; }
+  }
+
+  &--error &__text { color: #fca5a5; }
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
 .app-layout {
   display: flex;
   flex-direction: column;
