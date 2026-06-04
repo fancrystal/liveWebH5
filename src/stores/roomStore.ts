@@ -7,6 +7,14 @@ import { getCookie, setCookie, deleteCookie } from '@/utils/cookie'
 /** Cookie key holding the session token (persists across page refresh). */
 const TOKEN_COOKIE = 'lh_token'
 
+/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
+const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+
+/** Prefixed console logger; only emits when VERBOSE_LOG is on. */
+function log(...args: unknown[]): void {
+  if (VERBOSE_LOG) console.log('[roomStore]', ...args)
+}
+
 export const useRoomStore = defineStore('room', () => {
   const room = ref<RoomInfo>({
     id: '',
@@ -70,6 +78,10 @@ export const useRoomStore = defineStore('room', () => {
     const code = params.get('code') || ''
     const roomName = params.get('roomName') || ''
 
+    log('bootstrap 开始 | isDev =', isDev)
+    log('原始 URL =', window.location.href)
+    log('解析参数 → sassUrl =', sassUrl.value, '| roomInfoId =', roomInfoId, '| code =', code ? `${code.slice(0, 8)}…` : '(无)')
+
     const roomPatch: Partial<RoomInfo> = {}
     if (roomInfoId) roomPatch.id = roomInfoId
     if (roomName) roomPatch.name = roomName
@@ -78,6 +90,7 @@ export const useRoomStore = defineStore('room', () => {
     // 1. Refresh path: reuse the cookie token, never touch the spent code.
     const cookieToken = getCookie(TOKEN_COOKIE)
     if (cookieToken) {
+      log('分支①: 命中 cookie token，复用 (length =', cookieToken.length, ')，跳过换取')
       token.value = cookieToken
       cleanUrl()
       return
@@ -88,7 +101,9 @@ export const useRoomStore = defineStore('room', () => {
     //    page reload reproduces the same error instead of silently dropping
     //    into a no-token state. cleanUrl() only runs after a successful swap.
     if (code && roomInfoId) {
+      log('分支②: 门户进入，开始用 code 换取 token')
       if (!sassUrl.value) {
+        log('分支②: 缺少 sassUrl，无法换取')
         throw new Error('未配置 SaaS 接口地址 (VITE_SASS_URL)')
       }
       const result = await exchangeCodeForToken(sassUrl.value, roomInfoId, code)
@@ -96,18 +111,23 @@ export const useRoomStore = defineStore('room', () => {
       userId.value = result.userId
       username.value = result.username
       setCookie(TOKEN_COOKIE, result.token, { sameSite: 'Lax' })
+      log('分支②: 换取成功并写入 cookie，清理 URL')
       cleanUrl()
       return
     }
 
     // 3. Dev fallback: read directly from env vars (no portal redirect).
     if (isDev) {
+      log('分支③: 开发兜底，从 VITE_DEV_* 读取 token/userId')
       token.value = import.meta.env.VITE_DEV_TOKEN ?? ''
       userId.value = import.meta.env.VITE_DEV_USER_ID ?? ''
       if (!room.value.id) {
         const devRoom = import.meta.env.VITE_DEV_ROOM_ID ?? ''
         if (devRoom) room.value = { ...room.value, id: devRoom }
       }
+      log('分支③: dev token.length =', token.value.length, '| userId =', userId.value || '(空)')
+    } else {
+      log('分支④: 无 cookie、无 code、非开发环境 → 无 token 进入应用')
     }
 
     // No cookie, no code, nothing to exchange — strip any stray sensitive

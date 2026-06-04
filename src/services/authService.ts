@@ -11,6 +11,14 @@
  * most once per entry; on refresh the cached cookie token is reused instead.
  */
 
+/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
+const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+
+/** Prefixed console logger; only emits when VERBOSE_LOG is on. */
+function log(...args: unknown[]): void {
+  if (VERBOSE_LOG) console.log('[authService]', ...args)
+}
+
 export interface ExchangeResult {
   token: string
   userId: string
@@ -46,6 +54,10 @@ export async function exchangeCodeForToken(
 ): Promise<ExchangeResult> {
   const endpoint = `${sassUrl.replace(/\/$/, '')}/livesaas/exchange`
 
+  log('exchange 请求 →', endpoint)
+  log('入参 roomInfoId =', roomInfoId, '| code =', code)
+
+  const startedAt = performance.now()
   let res: Response
   try {
     res = await fetch(endpoint, {
@@ -57,19 +69,36 @@ export async function exchangeCodeForToken(
   } catch (err: unknown) {
     // A rejected fetch here means the request never completed: network error,
     // DNS failure, or a CORS preflight/response rejection by the browser.
-    if (err instanceof Error && err.name === 'AbortError') throw err
+    if (err instanceof Error && err.name === 'AbortError') {
+      log('请求被取消 (AbortError)')
+      throw err
+    }
+    log('请求失败 (网络/CORS):', err)
     throw new Error('无法连接登录服务，请检查网络或服务端跨域(CORS)配置')
   }
 
+  const elapsed = Math.round(performance.now() - startedAt)
+  log(`响应 HTTP ${res.status} (${elapsed}ms)`)
+
   if (!res.ok) {
+    log('HTTP 非 2xx，判定为登录服务异常')
     throw new Error(`登录服务异常 (HTTP ${res.status})`)
   }
 
   const json = (await res.json()) as ExchangeResponse
+  log('响应体 code =', json.code, '| msg =', json.msg, '| requestId =', json.requestId)
+
   if (json.code !== 200 || !json.data) {
     // Surface the server message verbatim, e.g. "链接已过期或已被使用，请刷新页面"
+    log('业务失败，透传服务端文案:', json.msg)
     throw new Error(json.msg || '换取登录令牌失败')
   }
+
+  log(
+    'exchange 成功 → userId =', json.data.userId,
+    '| username =', json.data.username,
+    '| token.length =', json.data.token?.length ?? 0,
+  )
 
   return {
     token:    json.data.token,
