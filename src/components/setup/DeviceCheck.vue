@@ -115,8 +115,12 @@ async function startAudioAnalysis(deviceId: string) {
 async function checkNetwork() {
   checks.value.network = 'pending'
   try {
+    // Probe the page's own origin instead of an external host. The app is
+    // deployed in mainland China, where google.com/generate_204 is blocked and
+    // times out (ERR_CONNECTION_TIMED_OUT). Same-origin is always reachable
+    // (the page already loaded from it) and gives a real latency reading.
     const t0 = Date.now()
-    await fetch('https://www.google.com/generate_204', { mode: 'no-cors', cache: 'no-store' })
+    await fetch(`${location.origin}/favicon.svg`, { mode: 'no-cors', cache: 'no-store' })
     checks.value.network = (Date.now() - t0) < 3000 ? 'ok' : 'fail'
   } catch {
     // Fallback: just mark ok if fetch itself doesn't throw network error
