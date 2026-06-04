@@ -59,10 +59,8 @@ export async function exchangeCodeForToken(
   const endpoint = `${sassUrl.replace(/\/$/, '')}/livesaas/exchange`
   const requestBody = JSON.stringify({ roomInfoId, code })
 
-  // ── TEMP debug: dump the full request. Remove after the WHIP wiring is verified. ──
   log('exchange 请求 →', endpoint)
-  log('入参 roomInfoId =', roomInfoId, '| code =', code)
-  log('请求 body(全文) =', requestBody)
+  log('入参 roomInfoId =', roomInfoId, '| code =', code ? `${code.slice(0, 8)}…` : '(空)')
 
   const startedAt = performance.now()
   let res: Response
@@ -93,8 +91,6 @@ export async function exchangeCodeForToken(
   }
 
   const json = (await res.json()) as ExchangeResponse
-  // ── TEMP debug: dump the full response envelope. Remove after verification. ──
-  log('响应 body(全文) =', JSON.stringify(json))
   log('响应体 code =', json.code, '| msg =', json.msg, '| requestId =', json.requestId)
 
   if (json.code !== 200 || !json.data) {
