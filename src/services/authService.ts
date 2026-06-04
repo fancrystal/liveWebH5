@@ -23,6 +23,8 @@ export interface ExchangeResult {
   token: string
   userId: string
   username: string
+  /** WebRTC (WHIP) push URL for this room, issued by the server. */
+  pushStreamUrl: string
 }
 
 /** Raw envelope returned by POST /livesaas/exchange. */
@@ -34,6 +36,8 @@ interface ExchangeResponse {
     token: string
     userId: string
     username: string
+    /** WHIP push address, e.g. https://host:20081/index/api/whip?app=live&stream=test */
+    pushStreamUrl: string
   } | null
 }
 
@@ -53,9 +57,12 @@ export async function exchangeCodeForToken(
   signal?:    AbortSignal,
 ): Promise<ExchangeResult> {
   const endpoint = `${sassUrl.replace(/\/$/, '')}/livesaas/exchange`
+  const requestBody = JSON.stringify({ roomInfoId, code })
 
+  // ── TEMP debug: dump the full request. Remove after the WHIP wiring is verified. ──
   log('exchange 请求 →', endpoint)
   log('入参 roomInfoId =', roomInfoId, '| code =', code)
+  log('请求 body(全文) =', requestBody)
 
   const startedAt = performance.now()
   let res: Response
@@ -63,7 +70,7 @@ export async function exchangeCodeForToken(
     res = await fetch(endpoint, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ roomInfoId, code }),
+      body:    requestBody,
       signal,
     })
   } catch (err: unknown) {
@@ -86,6 +93,8 @@ export async function exchangeCodeForToken(
   }
 
   const json = (await res.json()) as ExchangeResponse
+  // ── TEMP debug: dump the full response envelope. Remove after verification. ──
+  log('响应 body(全文) =', JSON.stringify(json))
   log('响应体 code =', json.code, '| msg =', json.msg, '| requestId =', json.requestId)
 
   if (json.code !== 200 || !json.data) {
@@ -98,11 +107,13 @@ export async function exchangeCodeForToken(
     'exchange 成功 → userId =', json.data.userId,
     '| username =', json.data.username,
     '| token.length =', json.data.token?.length ?? 0,
+    '| pushStreamUrl =', json.data.pushStreamUrl || '(空)',
   )
 
   return {
-    token:    json.data.token,
-    userId:   json.data.userId,
-    username: json.data.username,
+    token:         json.data.token,
+    userId:        json.data.userId,
+    username:      json.data.username,
+    pushStreamUrl: json.data.pushStreamUrl ?? '',
   }
 }

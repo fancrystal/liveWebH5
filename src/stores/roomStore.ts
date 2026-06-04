@@ -6,6 +6,8 @@ import { getCookie, setCookie, deleteCookie } from '@/utils/cookie'
 
 /** Cookie key holding the session token (persists across page refresh). */
 const TOKEN_COOKIE = 'lh_token'
+/** Cookie key holding the WHIP push URL (so a refresh keeps the real address). */
+const PUSH_URL_COOKIE = 'lh_push'
 
 /** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
 const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
@@ -34,6 +36,8 @@ export const useRoomStore = defineStore('room', () => {
   const userId = ref('')
   /** Current host display name (from exchange response). */
   const username = ref('')
+  /** WHIP push URL issued by the server for this room (from exchange response). */
+  const pushStreamUrl = ref('')
 
   /**
    * Resolve the SaaS API base URL.
@@ -88,10 +92,16 @@ export const useRoomStore = defineStore('room', () => {
     if (Object.keys(roomPatch).length) room.value = { ...room.value, ...roomPatch }
 
     // 1. Refresh path: reuse the cookie token, never touch the spent code.
+    //    The push URL was persisted alongside the token, so restore it too —
+    //    on refresh there is no code to re-exchange, and the address would
+    //    otherwise be lost.
     const cookieToken = getCookie(TOKEN_COOKIE)
     if (cookieToken) {
-      log('分支①: 命中 cookie token，复用 (length =', cookieToken.length, ')，跳过换取')
+      const cookiePush = getCookie(PUSH_URL_COOKIE) ?? ''
+      log('分支①: 命中 cookie token，复用 (length =', cookieToken.length,
+          ') | pushStreamUrl =', cookiePush || '(空)', '，跳过换取')
       token.value = cookieToken
+      pushStreamUrl.value = cookiePush
       cleanUrl()
       return
     }
@@ -110,8 +120,12 @@ export const useRoomStore = defineStore('room', () => {
       token.value = result.token
       userId.value = result.userId
       username.value = result.username
+      pushStreamUrl.value = result.pushStreamUrl
       setCookie(TOKEN_COOKIE, result.token, { sameSite: 'Lax' })
-      log('分支②: 换取成功并写入 cookie，清理 URL')
+      if (result.pushStreamUrl) {
+        setCookie(PUSH_URL_COOKIE, result.pushStreamUrl, { sameSite: 'Lax' })
+      }
+      log('分支②: 换取成功并写入 cookie | pushStreamUrl =', result.pushStreamUrl || '(空)', '，清理 URL')
       cleanUrl()
       return
     }
@@ -148,7 +162,9 @@ export const useRoomStore = defineStore('room', () => {
     token.value = ''
     userId.value = ''
     username.value = ''
+    pushStreamUrl.value = ''
     deleteCookie(TOKEN_COOKIE)
+    deleteCookie(PUSH_URL_COOKIE)
   }
 
   function updateRoom(partial: Partial<RoomInfo>) {
@@ -165,6 +181,7 @@ export const useRoomStore = defineStore('room', () => {
     token,
     userId,
     username,
+    pushStreamUrl,
     updateRoom,
     togglePreviewLock,
     bootstrap,

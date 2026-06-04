@@ -119,6 +119,16 @@ onMounted(async () => {
     await roomStore.bootstrap()
     authState.value = 'ready'
     log('鉴权成功 → authState=ready | roomId =', roomStore.room.id || '(空)', '| token.length =', roomStore.token.length, '| userId =', roomStore.userId || '(空)')
+
+    // Apply the server-issued WHIP push URL so the settings panel and WebRTC
+    // path use the real address instead of the localhost dev fallback. Only
+    // override when the server actually returned one.
+    if (roomStore.pushStreamUrl) {
+      streamStore.updateConfig({ whipUrl: roomStore.pushStreamUrl })
+      log('已写入真实 WHIP 推流地址 → whipUrl =', roomStore.pushStreamUrl)
+    } else {
+      log('未获取到 pushStreamUrl，沿用默认 whipUrl =', streamStore.config.whipUrl)
+    }
   } catch (e) {
     authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
     authState.value = 'error'
