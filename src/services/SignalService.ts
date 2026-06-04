@@ -2,6 +2,13 @@ import { io, type Socket } from 'socket.io-client'
 
 export type SignalHandler = (...args: unknown[]) => void
 
+/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
+const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+/** Prefixed console logger; only emits when VERBOSE_LOG is on. */
+function log(...args: unknown[]): void {
+  if (VERBOSE_LOG) console.log('[SignalService]', ...args)
+}
+
 /**
  * Singleton-style wrapper around socket.io for signaling.
  * Used by App.vue (connect) and useCoStream (WebRTC signal relay).
@@ -11,8 +18,18 @@ export class SignalService {
   private handlers: Map<string, SignalHandler[]> = new Map()
 
   connect(serverUrl: string, query: Record<string, string>) {
-    if (this.socket?.connected) return
+    // Signaling disabled: no backend configured. Bail out so we never open a
+    // doomed wss connection (which would otherwise spam the console).
+    if (!serverUrl?.trim()) {
+      log('connect 跳过：未配置信令地址')
+      return
+    }
+    if (this.socket?.connected) {
+      log('connect 跳过：已连接')
+      return
+    }
 
+    log('发起连接 →', serverUrl, '| query =', JSON.stringify(query))
     this.socket = io(serverUrl, {
       query,
       transports: ['websocket'],
@@ -20,6 +37,12 @@ export class SignalService {
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
     })
+
+    // Lifecycle diagnostics — invaluable when debugging signaling in the test env.
+    this.socket.on('connect', () => log('✅ 已连接 | socket.id =', this.socket?.id))
+    this.socket.on('connect_error', (err) => log('❌ 连接失败 |', err?.message ?? err))
+    this.socket.on('disconnect', (reason) => log('⚠️ 已断开 | reason =', reason))
+    this.socket.io.on('reconnect_attempt', (n) => log('🔄 重连尝试 #', n))
 
     // Re-bind any handlers registered before connection
     this.handlers.forEach((fns, event) => {

@@ -33,6 +33,13 @@ import { isSafari, supportsRTMP } from '@/utils/browser'
 import { signalService } from '@/services/SignalService'
 import { useRoomStore } from '@/stores/roomStore'
 
+/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
+const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+/** Prefixed console logger; only emits when VERBOSE_LOG is on. */
+function log(...args: unknown[]): void {
+  if (VERBOSE_LOG) console.log('[App]', ...args)
+}
+
 /** false = device check page, true = main live interface */
 const deviceCheckDone = ref(false)
 
@@ -102,28 +109,44 @@ const audioMixer = useAudioMixer()
 const showCloudDrive = ref(false)
 
 onMounted(async () => {
+  log('onMounted 开始 | 构建模式 =', import.meta.env.MODE, '| VERBOSE_LOG =', VERBOSE_LOG)
+
   // Exchange the one-time portal code for a session token (or reuse cookie /
   // dev env fallback). Block the UI until this resolves so an expired link
   // surfaces immediately instead of after device setup.
   try {
+    log('开始鉴权 bootstrap()…')
     await roomStore.bootstrap()
     authState.value = 'ready'
+    log('鉴权成功 → authState=ready | roomId =', roomStore.room.id || '(空)', '| token.length =', roomStore.token.length, '| userId =', roomStore.userId || '(空)')
   } catch (e) {
     authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
     authState.value = 'error'
+    log('鉴权失败 → authState=error | 原因 =', authErrorMsg.value)
     return  // halt bootstrap — no signaling / device flow without a valid session
   }
 
-  if (isSafari() || !supportsRTMP()) {
+  const browserOk = !(isSafari() || !supportsRTMP())
+  log('浏览器能力检测 | isSafari =', isSafari(), '| supportsRTMP =', supportsRTMP(), '| RTMP 可用 =', browserOk)
+  if (!browserOk) {
     toast.warn('当前浏览器不支持 RTMP 推流，推荐使用 WebRTC (WHIP) 模式')
   }
 
-  // Connect to signaling server for whiteboard sync, chat, and co-streaming
-  const signalUrl = import.meta.env.VITE_SIGNAL_URL ?? 'http://localhost:3000'
-  const roomId = roomStore.room.id ?? 'default'
-  const userId = 'host-' + Date.now()
+  // Connect to signaling server for whiteboard sync, chat, and co-streaming.
+  // When VITE_SIGNAL_URL is empty (signaling backend not deployed), skip the
+  // connection entirely — otherwise socket.io would fall back to the current
+  // origin and spam failed wss attempts in the console.
+  const signalUrl = (import.meta.env.VITE_SIGNAL_URL ?? '').trim()
+  if (signalUrl) {
+    const roomId = roomStore.room.id ?? 'default'
+    const userId = 'host-' + Date.now()
+    log('信令已配置，发起 socket.io 连接 →', signalUrl, '| roomId =', roomId, '| userId =', userId)
+    signalService.connect(signalUrl, { roomId, userId, role: 'host' })
+  } else {
+    log('信令未配置 (VITE_SIGNAL_URL 为空)，跳过连接 — 聊天/连麦功能禁用')
+  }
 
-  signalService.connect(signalUrl, { roomId, userId, role: 'host' })
+  log('onMounted 完成')
 })
 
 // ── Video insert audio mixing ────────────────────────────────────────────────
