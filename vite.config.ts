@@ -10,6 +10,16 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Output all dynamic-import chunks (including pdf.worker) as .js instead of .mjs.
+        // This avoids nginx MIME-type issues: nginx serves .js as application/javascript
+        // by default, but many distros don't include .mjs in mime.types.
+        chunkFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+  },
   server: {
     port: 3000,
     host: true,
