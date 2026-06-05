@@ -22,6 +22,7 @@ const toast       = useToast()
 const searchInput = ref('')
 const searchTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
+
 // ── Config state ──────────────────────────────────────────────────────────
 /** True when the required server config is present to actually call the API */
 const isConfigured = computed(() => !!(roomStore.sassUrl && roomStore.token))
@@ -52,6 +53,10 @@ const activeTab = ref<Tab>('video')
 
 // ── Actions ────────────────────────────────────────────────────────────────
 function insertVideo(file: CloudFile, mode: VideoInsertMode) {
+  if (!file.downloadUrl) {
+    toast.error('视频地址无效，无法插播')
+    return
+  }
   mediaStore.startVideoInsert(file, mode)
   emit('close')
 }
@@ -711,6 +716,7 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
   animation: cdp-spin 0.7s linear infinite;
 
   &--sm { width: 14px; height: 14px; border-width: 2px; }
+  &--xs { width: 10px; height: 10px; border-width: 2px; }
 }
 
 @keyframes cdp-spin {

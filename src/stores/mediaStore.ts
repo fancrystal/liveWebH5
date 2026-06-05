@@ -162,6 +162,7 @@ export const useMediaStore = defineStore('media', () => {
     // crossOrigin MUST be set before src to prevent canvas tainting.
     // Setting src first triggers a CORS-unaware request; drawImage on the
     // resulting canvas will throw SecurityError on captureStream().
+    // Note: blob: URLs are same-origin — crossOrigin='anonymous' is harmless for them.
     v.crossOrigin = 'anonymous'
     v.src         = file.downloadUrl
     v.autoplay    = true

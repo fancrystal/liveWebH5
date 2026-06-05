@@ -101,6 +101,15 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
+    # ES module worker files (.mjs) — nginx:alpine mime.types does not include
+    # .mjs by default, which causes browsers to reject them as module scripts.
+    location ~* \.mjs$ {
+        types { }
+        default_type application/javascript;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
     add_header Access-Control-Allow-Origin *;
     add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
     add_header Access-Control-Allow-Headers "Content-Type";

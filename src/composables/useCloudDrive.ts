@@ -32,10 +32,48 @@ interface ListVideoRoomResponse {
   }
 }
 
+/**
+ * Extract scheme://host[:port] from a URL string.
+ * Mirrors the PC client's originFromUrl() in client_service.cpp.
+ * keepPort=true  → include port (used for CDN / cover URL origin)
+ * keepPort=false → omit port   (used for sassUrl fallback)
+ */
+function extractOrigin(rawUrl: string, keepPort: boolean): string {
+  try {
+    const u = new URL(rawUrl.trim())
+    if (!u.protocol || !u.hostname) return ''
+    let origin = `${u.protocol}//${u.hostname}`
+    if (keepPort && u.port) origin += `:${u.port}`
+    return origin
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Build a public download URL from a fileKey path.
+ * Mirrors buildDownloadUrlFromFileKey() in the PC client (client_service.cpp):
+ *   1. If fileKey is already a full URL, return it as-is.
+ *   2. Try to use the origin of videoCoverUrl (CDN, public, keepPort=true).
+ *   3. Fall back to the origin of sassUrl (keepPort=false).
+ */
+function buildDownloadUrl(fileKey: string, coverUrl: string, sassUrl: string): string {
+  const key = fileKey.trim()
+  if (key.startsWith('http://') || key.startsWith('https://')) return key
+
+  const normalizedKey  = key.replace(/^\/+/, '')
+  const coverOrigin    = extractOrigin(coverUrl, true)
+  const base           = coverOrigin || extractOrigin(sassUrl, false)
+  return base ? `${base}/${normalizedKey}` : normalizedKey
+}
+
 function mapRecord(r: VideoRoomRecord, sassUrl: string): CloudFile {
-  // Prefer the transcoded MP4 URL; fall back to sassUrl + fileKey (original upload)
-  // when transcoding hasn't finished or transcodingFileMp4Url is not yet populated.
-  const downloadUrl = r.transcodingFileMp4Url || (r.fileKey ? `${sassUrl}/${r.fileKey}` : '')
+  // Follow the same logic as the PC client (client_service.cpp parseInsertFileJson):
+  //   1. Use transcodingFileMp4Url if present and non-empty.
+  //   2. Otherwise build from fileKey using the cover URL's CDN origin as the base,
+  //      which gives a publicly accessible URL without needing an Authorization header.
+  const downloadUrl = (r.transcodingFileMp4Url || '').trim()
+    || (r.fileKey ? buildDownloadUrl(r.fileKey, r.videoCoverUrl || '', sassUrl) : '')
   return {
     id:          r.videoRoomId,
     name:        r.videoName,
