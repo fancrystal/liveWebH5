@@ -176,7 +176,13 @@ export function useStreamMixer() {
         && insertEl.videoWidth > 0
 
       if (insertReady && insertMode === 'fullscreen') {
-        try { ctx.drawImage(insertEl, 0, 0, width, height) } catch { /* not ready */ }
+        try {
+          // Black letterbox bars (matches preview .vip--fullscreen{background:#000}),
+          // then draw the video centered preserving aspect ratio (no stretch).
+          ctx.fillStyle = '#000000'
+          ctx.fillRect(0, 0, width, height)
+          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, 0, 0, width, height)
+        } catch { /* not ready */ }
       }
 
       // 4. Co-stream participants (adaptive grid at bottom-left)
@@ -252,7 +258,13 @@ export function useStreamMixer() {
         ctx.beginPath()
         ctx.roundRect(pipX, pipY, pipW, pipH, r)
         ctx.clip()
-        try { ctx.drawImage(insertEl!, pipX, pipY, pipW, pipH) } catch { /* not ready */ }
+        try {
+          // Black background inside the rounded rect, then aspect-preserving draw
+          // so portrait (phone) videos aren't horizontally stretched.
+          ctx.fillStyle = '#000000'
+          ctx.fillRect(pipX, pipY, pipW, pipH)
+          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, pipX, pipY, pipW, pipH)
+        } catch { /* not ready */ }
         ctx.restore()
 
         // Border
@@ -352,6 +364,33 @@ export function useStreamMixer() {
     const stream = new MediaStream(tracks)
     outputStream.value = stream
     return stream
+  }
+
+  /**
+   * Draw `media` into the target rect [dx,dy,dw,dh] preserving its aspect ratio
+   * (object-fit:contain / letterbox). Falls back to a plain stretch when the
+   * intrinsic size is unknown (mediaW/H = 0).
+   */
+  function drawContain(
+    ctx: CanvasRenderingContext2D,
+    media: CanvasImageSource,
+    mediaW: number,
+    mediaH: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ) {
+    if (mediaW > 0 && mediaH > 0) {
+      const scale = Math.min(dw / mediaW, dh / mediaH)
+      const w = Math.round(mediaW * scale)
+      const h = Math.round(mediaH * scale)
+      const x = Math.round(dx + (dw - w) / 2)
+      const y = Math.round(dy + (dh - h) / 2)
+      ctx.drawImage(media, x, y, w, h)
+    } else {
+      ctx.drawImage(media, dx, dy, dw, dh)
+    }
   }
 
   function drawPlaceholder(

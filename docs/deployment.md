@@ -194,10 +194,14 @@ docker compose restart nginx
 
 生产环境配置文件：`.env.production`
 
-| 变量 | 说明 | 默认值 |
+| 变量 | 说明 | 生产值 |
 |------|------|--------|
-| `VITE_SIGNAL_URL` | 信令服务器地址 | `http://172.21.0.15:3000` |
-| `VITE_RTMP_WS_URL` | RTMP 中转 WebSocket | `ws://172.21.0.15:8080/rtmp-relay` |
-| `VITE_WHIP_URL` | 默认 WHIP 推流地址 | `http://172.21.0.15:1985/rtc/v1/whip/?app=live&stream=test` |
+| `VITE_SASS_URL` | SaaS 接口基地址（鉴权换取 + 云盘业务共用） | `https://qdd-test.lxi-tech.com:15816` |
+| `VITE_SIGNAL_URL` | 信令服务器地址（socket.io），留空则跳过连接 | 留空 |
+| `VITE_RTMP_WS_URL` | RTMP 中转 WebSocket，留空则按当前域名自动拼接 | 留空 |
+| `VITE_WHIP_URL` | 默认 WHIP 推流地址兜底（服务端下发 `pushStreamUrl` 时不使用） | 留空 |
+| `VITE_VERBOSE_LOG` | 详细诊断日志开关，正式上线应改回 `false` | `true`（当前部署于测试环境） |
+
+> **推流地址来源**：主播经管理门户「网页开播」进入时，H5 用一次性 `code` 换取 token 时会一并拿到该房间的 WHIP 推流地址 `pushStreamUrl`，自动填入推流设置。`VITE_WHIP_URL` 仅作为未下发时的兜底。详见 [auth-and-portal-entry-flow.md](auth-and-portal-entry-flow.md)。
 
 修改后需要重新执行 `npm run build` 并重启 nginx。

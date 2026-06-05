@@ -4,15 +4,11 @@ import { useMediaStore } from '@/stores/mediaStore'
 
 const mediaStore = useMediaStore()
 const containerEl = ref<HTMLElement | null>(null)
-const previewEl   = ref<HTMLVideoElement | null>(null)
 
 // ── Video dimensions ─────────────────────────────────────────────────────────
 const videoW = ref(0)
 const videoH = ref(0)
-const isPortrait  = computed(() => videoH.value > 0 && videoH.value > videoW.value)
-const aspectRatio = computed(() =>
-  videoW.value > 0 && videoH.value > 0 ? `${videoW.value} / ${videoH.value}` : '16 / 9',
-)
+const isPortrait = computed(() => videoH.value > 0 && videoH.value > videoW.value)
 
 // ── PiP position / size ──────────────────────────────────────────────────────
 const userX = ref<number | null>(null)
@@ -29,77 +25,78 @@ const pipStyle = computed(() => {
   return { width: `${w}px` }
 })
 
-// ── Video binding ─────────────────────────────────────────────────────────────
-/** src of the last successfully bound video — used to detect "new video" vs mode switch */
-let lastBoundUrl = ''
+// ── Shared element attachment (Bug 2/4 fix) ──────────────────────────────────
+// Instead of cloning the source into a second <video>, we render the SAME
+// element the mixer draws and the control bar controls (mediaStore.videoInsertEl).
+// One element → play / pause / seek state can never diverge between the browser
+// preview and the push-stream.
+/** src of the last attached element — detects "new video" vs a pip↔fullscreen toggle */
+let lastElUrl = ''
 
-function bindSource(sourceEl: HTMLVideoElement | null) {
-  const preview = previewEl.value
-  if (!preview || !sourceEl) return
+function applyVideoStyle(el: HTMLVideoElement) {
+  // The appended native node lives outside Vue's scoped CSS, so style it inline.
+  el.style.display      = 'block'
+  el.style.background    = '#000'
+  el.style.pointerEvents = 'none'
+  el.style.objectFit     = 'contain'
+  el.style.borderRadius  = 'inherit'
+  if (mediaStore.videoInsertMode === 'fullscreen') {
+    el.style.width  = '100%'
+    el.style.height = '100%'
+  } else {
+    // PiP: container width is driven by pipStyle; video keeps intrinsic ratio.
+    el.style.width  = '100%'
+    el.style.height = 'auto'
+  }
+}
 
-  const url = sourceEl.src
-  if (!url) return
+function readDimensions(el: HTMLVideoElement) {
+  const set = () => { videoW.value = el.videoWidth; videoH.value = el.videoHeight }
+  if (el.videoWidth > 0) set()
+  else el.addEventListener('loadedmetadata', set, { once: true })
+}
 
-  const isNewVideo = url !== lastBoundUrl
-  lastBoundUrl = url
+function attach() {
+  const el = mediaStore.videoInsertEl as HTMLVideoElement | null
+  const container = containerEl.value
+  if (!mediaStore.isVideoInserting || !el || !container) return
 
-  // Reset position/size only for a new video, not on pip↔fullscreen toggle
-  if (isNewVideo) {
+  const url = el.src
+  const isNew = url !== lastElUrl
+  lastElUrl = url
+
+  // Reset pip position/size only for a genuinely new video, not on a mode toggle.
+  if (isNew) {
     videoW.value = 0
     videoH.value = 0
     userX.value  = null
     userY.value  = null
     userW.value  = null
   }
-  // Sync default position to store so Mixer uses the right coordinates from frame 1
-  // (containerEl may not exist yet at this point if we just mounted; syncToStore()
-  //  is also called on pointerUp, so the store stays in sync during interaction)
-  // We schedule a microtask so containerEl is ready after Vue paints the element.
+
+  // Move the shared element into the preview container (it starts hidden on body).
+  if (el.parentElement !== container) container.appendChild(el)
+  applyVideoStyle(el)
+  readDimensions(el)
+
+  // Push default pip coords to the store so the mixer matches from frame 1.
   Promise.resolve().then(() => syncToStore())
-
-  preview.src = url
-
-  const onMeta = () => {
-    videoW.value = preview.videoWidth
-    videoH.value = preview.videoHeight
-    // Seek close to the source's position only for a new video
-    if (isNewVideo && sourceEl.currentTime > 0.5) {
-      try { preview.currentTime = sourceEl.currentTime } catch { /* seek may fail */ }
-    }
-    // play() is called after metadata — avoids AbortError from interrupted load
-    preview.play().catch((err: Error) => {
-      // Ignore AbortError from mode switches that re-bind before play resolves
-      if (err.name !== 'AbortError') console.error('[VideoInsertPreview] play()', err)
-    })
-  }
-
-  if (preview.readyState >= 1 /* HAVE_METADATA */) {
-    onMeta()
-  } else {
-    preview.addEventListener('loadedmetadata', onMeta, { once: true })
-  }
 }
 
-/**
- * flush:'post' — runs AFTER Vue has committed DOM updates.
- *   • previewEl ref is guaranteed populated (no nextTick hack needed)
- *   • No second call from a stale pre-flush watcher → no AbortError
- *
- * Watching videoInsertMode as well handles pip↔fullscreen switches:
- * Vue destroys the old <video> and mounts a new one; without this, the new
- * element would have no src and show a black screen.
- */
 watch(
-  [() => mediaStore.isVideoInserting, () => mediaStore.videoInsertMode],
+  [
+    () => mediaStore.isVideoInserting,
+    () => mediaStore.videoInsertMode,
+    () => mediaStore.videoInsertEl,
+  ],
   ([inserting]) => {
     if (!inserting) {
-      // Reset state — v-if destroys the <video> elements automatically
-      videoW.value  = 0
-      videoH.value  = 0
-      lastBoundUrl  = ''
+      videoW.value = 0
+      videoH.value = 0
+      lastElUrl    = ''
       return
     }
-    bindSource(mediaStore.videoInsertEl as HTMLVideoElement | null)
+    attach()
   },
   { flush: 'post' },
 )
@@ -107,6 +104,8 @@ watch(
 onMounted(() => {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup',   onPointerUp)
+  // Handle the case where an insert is already active when this mounts.
+  if (mediaStore.isVideoInserting) attach()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
@@ -201,41 +200,27 @@ function onPointerUp() {
 
 <template>
   <Transition name="vip-fade">
-    <!-- PiP mode -->
+    <!-- Container stays mounted for the whole insert; pip/fullscreen via class.
+         The shared <video> (mediaStore.videoInsertEl) is appended here in attach(). -->
     <div
-      v-if="mediaStore.isVideoInserting && mediaStore.videoInsertMode === 'pip'"
+      v-if="mediaStore.isVideoInserting"
       ref="containerEl"
-      class="vip vip--pip"
-      :style="pipStyle"
+      class="vip"
+      :class="mediaStore.videoInsertMode === 'pip' ? 'vip--pip' : 'vip--fullscreen'"
+      :style="mediaStore.videoInsertMode === 'pip' ? pipStyle : undefined"
       @pointerdown="onDragStart"
     >
-      <video
-        ref="previewEl"
-        class="vip__video"
-        :style="{ aspectRatio }"
-        autoplay
-        muted
-        playsinline
-      />
       <span class="vip__badge">
-        画中画<template v-if="videoW > 0"> · {{ videoW }}×{{ videoH }}</template>
+        <template v-if="mediaStore.videoInsertMode === 'pip'">
+          画中画<template v-if="videoW > 0"> · {{ videoW }}×{{ videoH }}</template>
+        </template>
+        <template v-else>全屏</template>
       </span>
-      <div class="vip__resize" @pointerdown="onResizeStart" />
-    </div>
-
-    <!-- Fullscreen mode -->
-    <div
-      v-else-if="mediaStore.isVideoInserting && mediaStore.videoInsertMode === 'fullscreen'"
-      class="vip vip--fullscreen"
-    >
-      <video
-        ref="previewEl"
-        class="vip__video"
-        autoplay
-        muted
-        playsinline
+      <div
+        v-if="mediaStore.videoInsertMode === 'pip'"
+        class="vip__resize"
+        @pointerdown="onResizeStart"
       />
-      <span class="vip__badge">全屏</span>
     </div>
   </Transition>
 </template>
@@ -246,15 +231,6 @@ function onPointerUp() {
   overflow: hidden;
   border-radius: 10px;
   z-index: 110;
-
-  &__video {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: #000;
-    object-fit: contain;
-    pointer-events: none;
-  }
 
   &__badge {
     position: absolute;
@@ -269,6 +245,7 @@ function onPointerUp() {
     pointer-events: none;
     user-select: none;
     white-space: nowrap;
+    z-index: 2;
   }
 
   &__resize {
@@ -279,6 +256,7 @@ function onPointerUp() {
     height: 20px;
     cursor: se-resize;
     pointer-events: all;
+    z-index: 2;
     &::after {
       content: '';
       position: absolute;
@@ -307,7 +285,6 @@ function onPointerUp() {
   border-radius: 0;
   z-index: 108;
   background: #000;
-  .vip__video { width: 100%; height: 100%; object-fit: contain; }
 }
 
 .vip-fade-enter-active,

@@ -9,6 +9,8 @@ interface VideoRoomRecord {
   videoRoomId: string
   videoName: string
   transcodingFileMp4Url: string
+  fileKey?: string          // original file key; used as fallback URL when transcodingFileMp4Url is empty
+  fileKeyTransTs?: string   // transcoded TS file key (not used currently, reserved for compatibility)
   videoCoverUrl: string
   videoDuration: string
   videoSize: string
@@ -30,12 +32,15 @@ interface ListVideoRoomResponse {
   }
 }
 
-function mapRecord(r: VideoRoomRecord): CloudFile {
+function mapRecord(r: VideoRoomRecord, sassUrl: string): CloudFile {
+  // Prefer the transcoded MP4 URL; fall back to sassUrl + fileKey (original upload)
+  // when transcoding hasn't finished or transcodingFileMp4Url is not yet populated.
+  const downloadUrl = r.transcodingFileMp4Url || (r.fileKey ? `${sassUrl}/${r.fileKey}` : '')
   return {
     id:          r.videoRoomId,
     name:        r.videoName,
     type:        guessFileType(r.videoMediaType, r.videoName),
-    downloadUrl: r.transcodingFileMp4Url,
+    downloadUrl,
     coverUrl:    r.videoCoverUrl,
     duration:    r.videoDuration ?? '',
     size:        r.videoSize ?? '',
@@ -106,7 +111,7 @@ export function useCloudDrive() {
     if (json.code !== 200) throw new Error(json.msg || '接口返回错误')
 
     return {
-      records:    (json.data.records ?? []).map(mapRecord),
+      records:    (json.data.records ?? []).map(r => mapRecord(r, roomStore.sassUrl)),
       totalCount: json.data.totalCount ?? 0,
     }
   }

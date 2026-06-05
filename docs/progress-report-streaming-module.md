@@ -282,10 +282,13 @@ ZLMediaKit 的 WHIP 接口目前直接暴露在公网，任何人只要知道地
 
 | 卡点 | 根因 | 状态 | 解决方案 |
 |------|------|------|---------|
-| **K8s nginx 缓冲卡顿** | nginx `proxy_buffering on`（默认），WebM 分片被积压后批量转发，ffmpeg 收到数据不均匀，导致 RTMP 输出周期性卡顿 | ✅ 已修复 | nginx 添加 `proxy_buffering off` + `tcp_nodelay on` |
-| **30分钟 Opus 崩溃** | 同一 WebSocket 上重启 MediaRecorder，ffmpeg 收到中途插入的新 WebM EBML 头，触发 Opus packet header error，断流 1~3s | ✅ 已修复 | 关闭 WS → 500ms 后新 WS → 新 ffmpeg 进程接收干净 WebM |
-| **TCP 积压延迟飙升** | 弱网时 `socket.bufferedAmount` 持续堆积，观众收到的是"过去内容"而非实时画面 | ✅ 已修复 | bufferedAmount 超过 2MB 丢弃当前帧，持续 8s 触发 recovery 重连 |
+| **🔴 浏览器→relay 上行带宽瓶颈** | 浏览器到 rtmp-relay 的 TCP 上行实测只有 ~500 kbps，而视频编码目标码率 ≥ 1 Mbps，导致 `socket.bufferedAmount` 持续堆积到 ~55 MB，反压机制不断丢帧，观众侧表现为"流畅一段卡一段"。**确认依据**：relay 日志 `kbps~500 stdinPauses=0`（说明 relay→腾讯云 RTMP 方向完全正常，瓶颈在浏览器上传段）；前端 console `wsBuffered` 在 2 MB 附近持续震荡（反压生效但上行带宽仍不足）；ffmpeg 输出侧无 stdin 背压，排除服务端问题。 | 🔴 当前核心卡点 | **方案 A（临时）**：将视频编码码率降至 400 kbps，匹配实际可用上行带宽；**方案 B（根本）**：排查 K8s Ingress 是否配置了 `nginx.ingress.kubernetes.io/limit-rate` 或节点带宽 QoS 限速策略；**方案 C（备选）**：切换 WHIP 模式（UDP，无 TCP 队列积压问题） |
+| **K8s nginx 缓冲卡顿** | nginx `proxy_buffering on`（默认），WebM 分片被积压后批量转发，ffmpeg 收到数据不均匀 | ✅ 已修复 | nginx 添加 `proxy_buffering off` + `tcp_nodelay on` |
+| **30分钟 Opus 崩溃** | 同一 WebSocket 上重启 MediaRecorder，ffmpeg 收到中途插入的新 WebM EBML 头，触发 Opus packet header error，断流 1~3s | ✅ 已修复 | 关闭 WS → 新 WS → 新 ffmpeg 进程接收干净 WebM |
+| **TCP 积压延迟飙升** | 弱网时 `socket.bufferedAmount` 持续堆积，观众收到"过去内容"而非实时画面 | ✅ 已修复 | bufferedAmount 超 2 MB 丢帧，持续 8s 触发 recovery 重连 |
 | **Safari 不支持** | Safari 的 MediaRecorder 不支持 h264/vp8 WebM 格式 | ⚠️ 已知限制 | 检测到 Safari 时降级提示，引导用户切换 WHIP 模式 |
+
+> **补充说明**：relay 日志中出现的 `EBML corruption / invalid packet` 警告，是反压机制丢弃 WebM 分片（非完整 cluster）后 ffmpeg 解析不完整数据产生的**副作用**，并非独立问题，根本原因仍是上行带宽不足。
 
 ---
 

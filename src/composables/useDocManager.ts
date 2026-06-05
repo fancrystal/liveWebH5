@@ -25,7 +25,11 @@ const isLoading = ref(false)
 const activeDoc = computed<DocEntry | null>(() => (openDocs.value.find(d => d.id === activeDocId.value) ?? null) as any)
 
 async function loadFile(file: File): Promise<void> {
-  if (file.type !== 'application/pdf') return
+  // Cloud-drive blobs may carry a generic MIME (e.g. application/octet-stream);
+  // fall back to the file extension so PDFs aren't silently dropped.
+  const isPdf =
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  if (!isPdf) return
   isLoading.value = true
   try {
     const buffer = await file.arrayBuffer()

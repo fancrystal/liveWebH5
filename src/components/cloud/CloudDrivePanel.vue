@@ -4,6 +4,7 @@ import { useCloudDrive } from '@/composables/useCloudDrive'
 import { useMediaStore } from '@/stores/mediaStore'
 import { useDocManager } from '@/composables/useDocManager'
 import { useRoomStore } from '@/stores/roomStore'
+import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useToast } from '@/composables/useToast'
 import type { CloudFile, VideoInsertMode } from '@/types/cloudDrive'
 
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 
 const mediaStore  = useMediaStore()
 const roomStore   = useRoomStore()
+const wbStore     = useWhiteboardStore()
 const cloudDrive  = useCloudDrive()
 const docManager  = useDocManager()
 const toast       = useToast()
@@ -67,7 +69,14 @@ async function shareDocument(file: CloudFile) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const f    = new File([blob], file.name, { type: blob.type })
-    docManager.loadFile(f)
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      toast.error('暂仅支持 PDF 文档共享到白板')
+      return
+    }
+    await docManager.loadFile(f)
+    // Switch the canvas to document mode so DocViewer (v-show) becomes visible.
+    wbStore.setActiveMode('document')
     emit('close')
   } catch (e: unknown) {
     clearTimeout(timer)
