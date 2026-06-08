@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, inject } from 'vue'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useI18n } from '@/i18n'
 import type { WhiteboardTool } from '@/types/whiteboard'
+import type { Ref } from 'vue'
 
 const wbStore = useWhiteboardStore()
 const { t }   = useI18n()
+
+// Doc drawer toggle (provided by App.vue)
+const docDrawerOpen   = inject<Ref<boolean>>('docDrawerOpen', ref(false))
+const toggleDocDrawer = inject<() => void>('toggleDocDrawer', () => {})
 
 interface ToolItem {
   tool: WhiteboardTool | 'undo' | 'redo' | 'delete'
@@ -63,6 +68,27 @@ function openCustomPicker() {
 
 <template>
   <aside class="left-toolbar no-select">
+    <!-- Document mode: panel toggle button -->
+    <template v-if="wbStore.activeMode === 'document'">
+      <div class="left-toolbar__group">
+        <button
+          class="left-toolbar__btn"
+          :class="{ active: docDrawerOpen }"
+          title="文档面板"
+          @click="toggleDocDrawer"
+        >
+          <!-- Panel list icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="18" rx="1"/>
+            <line x1="14" y1="8" x2="21" y2="8"/>
+            <line x1="14" y1="12" x2="21" y2="12"/>
+            <line x1="14" y1="16" x2="21" y2="16"/>
+          </svg>
+        </button>
+      </div>
+      <div class="left-toolbar__divider" />
+    </template>
+
     <!-- Drawing tools -->
     <div class="left-toolbar__group">
       <button

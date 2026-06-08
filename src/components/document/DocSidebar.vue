@@ -2,6 +2,9 @@
 import { ref } from 'vue'
 import { useDocManager } from '@/composables/useDocManager'
 
+defineProps<{ open: boolean }>()
+const emit = defineEmits<{ close: [] }>()
+
 const { openDocs, activeDocId, activeDoc, isLoading, loadFile, closeDoc, setActiveDoc, setCurrentPage } = useDocManager()
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -10,7 +13,6 @@ function triggerUpload() { fileInput.value?.click() }
 async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (file) await loadFile(file)
-  // Reset so the same file can be re-selected next time
   if (fileInput.value) fileInput.value.value = ''
 }
 
@@ -20,74 +22,127 @@ function onThumbnailClick(page: number) {
 </script>
 
 <template>
-  <aside class="doc-sidebar no-select">
-    <!-- Open document button -->
-    <button class="doc-sidebar__new-btn" :disabled="isLoading" @click="triggerUpload">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="12" y1="18" x2="12" y2="12"/>
-        <line x1="9" y1="15" x2="15" y2="15"/>
-      </svg>
-      打开新文档
-    </button>
-    <input ref="fileInput" type="file" accept=".pdf" class="doc-sidebar__file-input" @change="onFileChange" />
-
-    <!-- Loading -->
-    <div v-if="isLoading" class="doc-sidebar__loading">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="doc-sidebar__spin">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
-      <span>加载中...</span>
-    </div>
-
-    <!-- Open document list -->
-    <div class="doc-sidebar__docs">
-      <div v-if="openDocs.length === 0 && !isLoading" class="doc-sidebar__empty">
-        暂无文档内容
+  <transition name="doc-drawer">
+    <aside v-if="open" class="doc-sidebar no-select">
+      <!-- Header -->
+      <div class="doc-sidebar__header">
+        <span class="doc-sidebar__title">文档面板</span>
+        <button class="doc-sidebar__close" title="收起" @click="emit('close')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
 
-      <div
-        v-for="doc in openDocs"
-        :key="doc.id"
-        class="doc-sidebar__doc-item"
-        :class="{ active: doc.id === activeDocId }"
-        @click="setActiveDoc(doc.id)"
-      >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="doc-sidebar__doc-icon">
+      <!-- Open document button -->
+      <button class="doc-sidebar__new-btn" :disabled="isLoading" @click="triggerUpload">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9" y1="15" x2="15" y2="15"/>
         </svg>
-        <span class="doc-sidebar__doc-name" :title="doc.name">{{ doc.name }}</span>
-        <button class="doc-sidebar__doc-close" @click.stop="closeDoc(doc.id)">×</button>
-      </div>
-    </div>
+        打开新文档
+      </button>
+      <input ref="fileInput" type="file" accept=".pdf" class="doc-sidebar__file-input" @change="onFileChange" />
 
-    <!-- Page thumbnails for the active document -->
-    <div v-if="activeDoc" class="doc-sidebar__thumbnails">
-      <div
-        v-for="(thumb, idx) in activeDoc.thumbnails"
-        :key="idx"
-        class="doc-sidebar__thumb"
-        :class="{ active: activeDoc.currentPage === idx + 1 }"
-        @click="onThumbnailClick(idx + 1)"
-      >
-        <img :src="thumb" :alt="`第 ${idx + 1} 页`" class="doc-sidebar__thumb-img" />
-        <span class="doc-sidebar__thumb-num">{{ idx + 1 }}</span>
+      <!-- Loading -->
+      <div v-if="isLoading" class="doc-sidebar__loading">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="doc-sidebar__spin">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <span>加载中...</span>
       </div>
-    </div>
-  </aside>
+
+      <!-- Open document list -->
+      <div class="doc-sidebar__docs">
+        <div v-if="openDocs.length === 0 && !isLoading" class="doc-sidebar__empty">
+          暂无文档内容
+        </div>
+        <div
+          v-for="doc in openDocs"
+          :key="doc.id"
+          class="doc-sidebar__doc-item"
+          :class="{ active: doc.id === activeDocId }"
+          @click="setActiveDoc(doc.id)"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="doc-sidebar__doc-icon">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span class="doc-sidebar__doc-name" :title="doc.name">{{ doc.name }}</span>
+          <button class="doc-sidebar__doc-close" @click.stop="closeDoc(doc.id)">×</button>
+        </div>
+      </div>
+
+      <!-- Page thumbnails for the active document -->
+      <div v-if="activeDoc" class="doc-sidebar__thumbnails">
+        <div
+          v-for="(thumb, idx) in activeDoc.thumbnails"
+          :key="idx"
+          class="doc-sidebar__thumb"
+          :class="{ active: activeDoc.currentPage === idx + 1 }"
+          @click="onThumbnailClick(idx + 1)"
+        >
+          <img :src="thumb" :alt="`第 ${idx + 1} 页`" class="doc-sidebar__thumb-img" />
+          <span class="doc-sidebar__thumb-num">{{ idx + 1 }}</span>
+        </div>
+      </div>
+    </aside>
+  </transition>
 </template>
 
 <style lang="scss" scoped>
 .doc-sidebar {
-  width: 160px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 168px;
+  z-index: 20;
   background: $color-bg-panel;
   border-right: 1px solid $color-border;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+
+  // ── Header ───────────────────────────────────────────────────────────────────
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 10px 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid $color-border;
+  }
+
+  &__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: $color-text-secondary;
+    letter-spacing: 0.4px;
+  }
+
+  &__close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: $color-text-muted;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0;
+    transition: all 0.1s;
+
+    &:hover {
+      background: $color-bg-hover;
+      color: $color-text-primary;
+    }
+  }
 
   // ── New-doc button ──────────────────────────────────────────────────────────
   &__new-btn {
@@ -247,6 +302,18 @@ function onThumbnailClick(page: number) {
     line-height: 1.4;
     pointer-events: none;
   }
+}
+
+// ── Drawer slide transition ────────────────────────────────────────────────────
+.doc-drawer-enter-active,
+.doc-drawer-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity  0.22s ease;
+}
+.doc-drawer-enter-from,
+.doc-drawer-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
 }
 
 @keyframes spin {

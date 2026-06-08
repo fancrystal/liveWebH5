@@ -108,6 +108,16 @@ const audioMixer = useAudioMixer()
 // Cloud drive panel visibility
 const showCloudDrive = ref(false)
 
+// Doc drawer (document panel overlay)
+const docDrawerOpen = ref(false)
+provide('docDrawerOpen', docDrawerOpen)
+provide('toggleDocDrawer', () => { docDrawerOpen.value = !docDrawerOpen.value })
+
+// Close the drawer automatically when leaving document mode
+watch(() => wbStore.activeMode, (mode) => {
+  if (mode !== 'document') docDrawerOpen.value = false
+})
+
 onMounted(async () => {
   log('onMounted 开始 | 构建模式 =', import.meta.env.MODE, '| VERBOSE_LOG =', VERBOSE_LOG)
 
@@ -274,14 +284,14 @@ provide('onOpenSettings', () => { showSettings.value = true })
     <TopBar />
 
     <div class="app-layout__body">
-      <!-- Whiteboard / screen mode: drawing toolbar -->
-      <LeftToolbar v-show="wbStore.activeMode !== 'document'" />
-      <!-- Document mode: doc list + page thumbnail sidebar -->
-      <DocSidebar v-show="wbStore.activeMode === 'document'" />
+      <!-- Drawing toolbar — always visible; in document mode it shows the panel toggle -->
+      <LeftToolbar />
 
       <div class="app-layout__canvas-area">
         <WhiteboardTabs v-show="wbStore.activeMode !== 'document'" />
         <div class="app-layout__canvas-wrap" @dragover="onCanvasDragOver" @drop="onCanvasDrop">
+          <!-- Document panel drawer — overlays the canvas from the left -->
+          <DocSidebar :open="docDrawerOpen" @close="docDrawerOpen = false" />
           <WhiteboardCanvas v-show="wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document'" />
           <ScreenSharePreview v-if="wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
           <DocViewer ref="docViewerRef" v-show="wbStore.activeMode === 'document'" />
