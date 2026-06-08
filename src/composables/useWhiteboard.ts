@@ -233,6 +233,19 @@ export function useWhiteboard(
     return obj instanceof fabric.IText && obj.isEditing
   }
 
+  // ─── Background helper ────────────────────────────────────────────────────
+  /** Return the correct backgroundColor for the current mode. */
+  function correctBg(): string {
+    const isOverlay = wbStore.activeMode === 'screen' || wbStore.activeMode === 'document'
+    return isOverlay ? '' : '#ffffff'
+  }
+
+  /** Apply the correct background after any loadFromJSON call. */
+  function fixBackground(canvas: fabric.Canvas) {
+    canvas.backgroundColor = correctBg()
+    canvas.renderAll()
+  }
+
   // ─── Undo / Redo ─────────────────────────────────────────────────────────
   function saveSnapshot() {
     const canvas = fc.value
@@ -247,6 +260,21 @@ export function useWhiteboard(
     onCanvasChange?.(id, json)
   }
 
+  /**
+   * Reset undo/redo history for the given page (defaults to activePageId).
+   * Called when switching into document mode so that undo only covers
+   * annotations drawn on the document, not prior whiteboard strokes.
+   */
+  function resetPageHistory(pageId?: string) {
+    const id = pageId ?? wbStore.activePageId
+    historyUndo.set(id, [])
+    historyRedo.set(id, [])
+    wbStore.canUndo = false
+    wbStore.canRedo = false
+    // Re-save the current canvas state as the new baseline snapshot
+    saveSnapshot()
+  }
+
   function undo() {
     const canvas = fc.value
     if (!canvas) return
@@ -258,7 +286,7 @@ export function useWhiteboard(
     historyRedo.get(id)!.push(current)
     const stateJson = stack[stack.length - 1] ?? '{}'
     canvas.loadFromJSON(stateJson).then(() => {
-      canvas.renderAll()
+      fixBackground(canvas)
       onCanvasChange?.(id, JSON.parse(stateJson))
     })
     wbStore.canUndo = stack.length > 1
@@ -274,7 +302,7 @@ export function useWhiteboard(
     const state = stack.pop()!
     historyUndo.get(id)!.push(state)
     canvas.loadFromJSON(state).then(() => {
-      canvas.renderAll()
+      fixBackground(canvas)
       onCanvasChange?.(id, JSON.parse(state))
     })
     wbStore.canUndo = true
@@ -285,7 +313,10 @@ export function useWhiteboard(
     const canvas = fc.value
     if (!canvas) return
     canvas.clear()
-    canvas.backgroundColor = '#ffffff'
+    // Preserve transparent background in overlay modes (document / screen annotation).
+    // canvas.clear() wipes backgroundColor, so we must re-apply the correct value.
+    const isOverlay = wbStore.activeMode === 'screen' || wbStore.activeMode === 'document'
+    canvas.backgroundColor = isOverlay ? '' : '#ffffff'
     canvas.renderAll()
     saveSnapshot()  // saveSnapshot already calls onCanvasChange
   }
@@ -300,10 +331,10 @@ export function useWhiteboard(
     // Load next page
     const nextPage = pages.find(p => p.id === nextId)
     if (nextPage?.fabricJson) {
-      canvas.loadFromJSON(nextPage.fabricJson).then(() => canvas.renderAll())
+      canvas.loadFromJSON(nextPage.fabricJson).then(() => fixBackground(canvas))
     } else {
       canvas.clear()
-      canvas.backgroundColor = '#ffffff'
+      canvas.backgroundColor = correctBg()
       canvas.renderAll()
     }
     applyTool(canvas, wbStore.activeTool)
@@ -344,5 +375,5 @@ export function useWhiteboard(
     fc.value = null
   })
 
-  return { fc, init, undo, redo, clearCanvas, getElement, resize, applyRemoteJson }
+  return { fc, init, undo, redo, clearCanvas, resetPageHistory, getElement, resize, applyRemoteJson }
 }

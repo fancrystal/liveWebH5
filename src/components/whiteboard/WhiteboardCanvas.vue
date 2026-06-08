@@ -3,8 +3,13 @@ import { ref, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useWhiteboard } from '@/composables/useWhiteboard'
 import { useWhiteboardSync } from '@/composables/useWhiteboardSync'
+import type { Ref } from 'vue'
 
 const wbStore = useWhiteboardStore()
+
+// Injected from App.vue — tracks DocViewer's scrollTop so we can keep annotations
+// aligned with the PDF content regardless of scroll position.
+const docScrollTop = inject<Ref<number>>('docScrollTop', ref(0))
 const containerEl = ref<HTMLDivElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 
@@ -12,7 +17,7 @@ const canvasEl = ref<HTMLCanvasElement | null>(null)
 // after useWhiteboard has initialised
 const applyRemoteJsonRef = ref<((json: object) => void) | null>(null)
 
-const { init, undo, redo, clearCanvas, resize, getElement, applyRemoteJson } =
+const { fc, init, undo, redo, clearCanvas, resetPageHistory, resize, getElement, applyRemoteJson } =
   useWhiteboard(canvasEl, (pageId, json) => wbSync.onLocalChange(pageId, json))
 
 // Wire up the ref after composable is created
@@ -26,6 +31,33 @@ const exposeCanvas = inject<(el: HTMLCanvasElement) => void>('exposeWhiteboardCa
 watch(() => wbStore.triggerUndo, () => undo())
 watch(() => wbStore.triggerRedo, () => redo())
 watch(() => wbStore.triggerClear, () => clearCanvas())
+
+// Sync Fabric viewport with DocViewer scroll so annotations stay aligned with PDF content.
+// viewportTransform = [scaleX, 0, 0, scaleY, panX, panY]
+// Setting panY = -scrollTop shifts all objects upward by scrollTop pixels, matching the PDF scroll.
+function applyDocScroll(scrollTop: number) {
+  if (!fc.value || wbStore.activeMode !== 'document') return
+  const vt = fc.value.viewportTransform as number[]
+  vt[5] = -scrollTop
+  fc.value.setViewportTransform(vt)
+  fc.value.renderAll()
+}
+
+watch(docScrollTop, (top) => applyDocScroll(top))
+
+// When entering document mode: apply current scroll and reset annotation history
+// so that undo only covers strokes drawn on the document, not prior whiteboard ops.
+// When leaving document mode: reset viewport transform so whiteboard mode is unaffected.
+watch(() => wbStore.activeMode, (mode) => {
+  if (!fc.value) return
+  if (mode === 'document') {
+    applyDocScroll(docScrollTop.value)
+    resetPageHistory()
+  } else {
+    fc.value.setViewportTransform([1, 0, 0, 1, 0, 0])
+    fc.value.renderAll()
+  }
+})
 
 let resizeObserver: ResizeObserver | null = null
 

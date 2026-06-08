@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, inject } from 'vue'
 import { useDocManager } from '@/composables/useDocManager'
+import type { Ref } from 'vue'
 
 const { activeDoc, activeDocId, loadFile } = useDocManager()
+
+// Inject the shared scrollTop ref provided by App.vue so WhiteboardCanvas can sync
+const docScrollTop = inject<Ref<number>>('docScrollTop', ref(0))
 
 const scrollWrap = ref<HTMLDivElement | null>(null)
 const isRendering = ref(false)
@@ -75,6 +79,14 @@ function getVisibleCanvas(): HTMLCanvasElement | null {
   return children[0] ?? null
 }
 
+// Sync scroll position so WhiteboardCanvas can offset its viewport transform to match
+function onScroll() {
+  if (scrollWrap.value) docScrollTop.value = scrollWrap.value.scrollTop
+}
+
+// Reset scroll tracking when document changes
+watch(activeDocId, () => { docScrollTop.value = 0 })
+
 // Drag-and-drop directly onto the viewer
 function onDragOver(e: DragEvent) { e.preventDefault() }
 function onDrop(e: DragEvent) {
@@ -105,7 +117,7 @@ defineExpose({ loadFile, getVisibleCanvas })
     </div>
 
     <!-- Page canvases — injected by renderAllPages() -->
-    <div ref="scrollWrap" class="doc-viewer__pages" />
+    <div ref="scrollWrap" class="doc-viewer__pages" @scroll="onScroll" />
   </div>
 </template>
 

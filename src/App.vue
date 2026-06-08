@@ -108,6 +108,10 @@ const audioMixer = useAudioMixer()
 // Cloud drive panel visibility
 const showCloudDrive = ref(false)
 
+// Shared scroll position for document mode — DocViewer writes, WhiteboardCanvas reads
+const docScrollTop = ref(0)
+provide('docScrollTop', docScrollTop)
+
 // Doc drawer (document panel overlay)
 const docDrawerOpen = ref(false)
 provide('docDrawerOpen', docDrawerOpen)
