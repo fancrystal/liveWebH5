@@ -37,9 +37,8 @@ watch(() => wbStore.triggerClear, () => clearCanvas())
 // Setting panY = -scrollTop shifts all objects upward by scrollTop pixels, matching the PDF scroll.
 function applyDocScroll(scrollTop: number) {
   if (!fc.value || wbStore.activeMode !== 'document') return
-  const vt = fc.value.viewportTransform as number[]
-  vt[5] = -scrollTop
-  fc.value.setViewportTransform(vt)
+  const vt = fc.value.viewportTransform
+  fc.value.setViewportTransform([vt[0], vt[1], vt[2], vt[3], vt[4], -scrollTop])
   fc.value.renderAll()
 }
 
