@@ -59,9 +59,48 @@ export const useWhiteboardStore = defineStore('whiteboard', () => {
     toolOptions.value = { ...toolOptions.value, ...opts }
   }
 
+  // ── Active mode ────────────────────────────────────────────────────────────
   const activeMode = ref<'whiteboard' | 'screen' | 'document'>('whiteboard')
 
+  // ── Content visibility (camera-maximize / whiteboard-hide) ─────────────────
+  /** Whether the main canvas content (whiteboard/document) is visually hidden
+   *  so the camera can fill the full canvas area. */
+  const isContentHidden = ref(false)
+
+  function toggleContentHidden() {
+    isContentHidden.value = !isContentHidden.value
+  }
+
+  // ── Screen-share mode enter/exit ───────────────────────────────────────────
+  // Dedicated helpers that atomically save/restore both activeMode and
+  // isContentHidden so screen-share never corrupts the pre-share UI state.
+  let _preScrContentHidden = false
+  let _preScrMode: 'whiteboard' | 'document' = 'whiteboard'
+
+  function enterScreenMode() {
+    if (activeMode.value === 'screen') return
+    _preScrContentHidden = isContentHidden.value
+    _preScrMode = activeMode.value === 'document' ? 'document' : 'whiteboard'
+    activeMode.value = 'screen'
+    isContentHidden.value = false          // reveal whiteboard overlay during share
+  }
+
+  function exitScreenMode() {
+    if (activeMode.value !== 'screen') return
+    const wasHidden = _preScrContentHidden
+    const prevMode  = _preScrMode
+    _preScrContentHidden = false
+    _preScrMode = 'whiteboard'
+    activeMode.value = prevMode            // restore whiteboard OR document
+    isContentHidden.value = wasHidden      // restore camera-maximized state atomically
+  }
+
   function setActiveMode(mode: 'whiteboard' | 'screen' | 'document') {
+    // Screen mode must go through enterScreenMode() so _preScrMode /
+    // _preScrContentHidden are saved correctly. Guard prevents accidental bypass.
+    if (mode === 'screen') { enterScreenMode(); return }
+    // Switching to a new mode always reveals the canvas content
+    if (activeMode.value !== mode) isContentHidden.value = false
     activeMode.value = mode
     // Auto-switch to select so document can be scrolled immediately
     if (mode === 'document') activeTool.value = 'select'
@@ -73,8 +112,9 @@ export const useWhiteboardStore = defineStore('whiteboard', () => {
 
   return {
     pages, activePageId, activeTool, toolOptions, canUndo, canRedo,
-    triggerUndo, triggerRedo, triggerClear, activeMode,
+    triggerUndo, triggerRedo, triggerClear, activeMode, isContentHidden,
     addPage, addPageWithId, removePage, switchPage, setTool, updateToolOptions,
-    fireUndo, fireRedo, fireClear, setActiveMode,
+    fireUndo, fireRedo, fireClear, setActiveMode, toggleContentHidden,
+    enterScreenMode, exitScreenMode,
   }
 })

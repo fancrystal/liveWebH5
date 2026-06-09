@@ -120,36 +120,45 @@ export function useStreamMixer() {
 
       // 2. Whiteboard / document content
       if (wbStore.activeMode === 'document') {
-        // Document mode: render PDF page canvas (object-fit:contain with dark bg)
+        // Document mode: render the off-screen streamCanvas (current PDF page) centred
+        // using object-fit:contain, then draw whiteboard annotation overlay at the
+        // exact same contain-rect so strokes stay aligned with the page.
         const docCanvas = docCanvasGetter()
         if (docCanvas) {
           try {
-            ctx.fillStyle = '#2a2a2a'
-            ctx.fillRect(0, 0, width, height)
-            // Scale PDF canvas to fit output maintaining aspect ratio
-            const dw = docCanvas.width
-            const dh = docCanvas.height
+            const dw    = docCanvas.width
+            const dh    = docCanvas.height
             const scale = Math.min(width / dw, height / dh)
             const dstW  = Math.round(dw * scale)
             const dstH  = Math.round(dh * scale)
             const dstX  = Math.round((width  - dstW) / 2)
             const dstY  = Math.round((height - dstH) / 2)
+            // 1) Draw PDF page
             ctx.drawImage(docCanvas, dstX, dstY, dstW, dstH)
+            // 2) Draw annotation overlay at the same rect (transparent Fabric canvas)
+            ctx.drawImage(whiteboardCanvas, dstX, dstY, dstW, dstH)
           } catch { /* not ready */ }
         }
-        // Also draw whiteboard annotation overlay on top of PDF
-        try { ctx.drawImage(whiteboardCanvas, 0, 0, width, height) } catch { /* not ready */ }
       } else {
         // Whiteboard / screen-share mode
         // Fabric.js uses two stacked canvases:
         //   lower-canvas — committed strokes and objects
         //   upper-canvas — in-progress drawing preview (active path during freehand)
         // We must draw both or the live stroke won't appear in the stream.
-        try { ctx.drawImage(whiteboardCanvas, 0, 0, width, height) } catch { /* not ready */ }
+        // Use drawContain so a landscape whiteboard isn't stretched into a portrait output.
+        const wbW = whiteboardCanvas.width  || width
+        const wbH = whiteboardCanvas.height || height
+        const wbScale = Math.min(width / wbW, height / wbH)
+        const wbDstW  = Math.round(wbW * wbScale)
+        const wbDstH  = Math.round(wbH * wbScale)
+        const wbDstX  = Math.round((width  - wbDstW) / 2)
+        const wbDstY  = Math.round((height - wbDstH) / 2)
+        try { ctx.drawImage(whiteboardCanvas, wbDstX, wbDstY, wbDstW, wbDstH) } catch { /* not ready */ }
         try {
           const upperCanvas = whiteboardCanvas.nextElementSibling as HTMLCanvasElement | null
           if (upperCanvas?.tagName === 'CANVAS') {
-            ctx.drawImage(upperCanvas, 0, 0, width, height)
+            // Draw upper canvas at the same contain-rect so strokes align with lower canvas
+            ctx.drawImage(upperCanvas, wbDstX, wbDstY, wbDstW, wbDstH)
           }
         } catch { /* upper canvas not ready */ }
       }
@@ -160,7 +169,10 @@ export function useStreamMixer() {
           screenVideo = createVideoEl(mediaStore.screenStream)
         }
         if (screenVideo.readyState >= 2) {
-          ctx.drawImage(screenVideo, 0, 0, width, height)
+          // drawContain: letterbox landscape screen into portrait output when needed
+          const svW = screenVideo.videoWidth  || width
+          const svH = screenVideo.videoHeight || height
+          drawContain(ctx, screenVideo, svW, svH, 0, 0, width, height)
         }
       } else {
         screenVideo = null

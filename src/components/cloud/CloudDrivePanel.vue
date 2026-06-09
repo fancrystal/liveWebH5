@@ -134,9 +134,10 @@ function formatDuration(d: string): string {
       <div class="cdp__header">
         <span class="cdp__title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"/>
+            <polygon points="10 9 10 15 16 12 10 9" fill="currentColor" stroke="none"/>
           </svg>
-          云盘文件
+          视频文件
         </span>
         <button class="cdp__close" @click="emit('close')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -182,11 +183,10 @@ function formatDuration(d: string): string {
         <!-- Not configured: guide the user to enter from management portal -->
         <div v-if="!isConfigured" class="cdp__state cdp__state--guide">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            <line x1="12" y1="11" x2="12" y2="17"/>
-            <line x1="9"  y1="14" x2="15" y2="14"/>
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"/>
+            <polygon points="10 9 10 15 16 12 10 9" fill="currentColor" stroke="none"/>
           </svg>
-          <p class="cdp__guide-title">云盘暂未连接</p>
+          <p class="cdp__guide-title">视频库暂未连接</p>
           <p class="cdp__guide-desc">
             请从管理后台的「进入直播」入口打开本页，<br />
             系统会自动带入认证信息。
@@ -338,7 +338,7 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
           </svg>
           上传本地视频插播
         </button>
-        <span class="cdp__local-hint">不依赖云盘，直接从本机选取 mp4 插播</span>
+        <span class="cdp__local-hint">不依赖视频库，直接从本机选取 mp4 插播</span>
       </div>
     </div>
   </div>

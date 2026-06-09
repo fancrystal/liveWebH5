@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, provide, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, provide, onMounted, watch, nextTick } from 'vue'
 import TopBar from '@/components/layout/TopBar.vue'
 import LeftToolbar from '@/components/layout/LeftToolbar.vue'
 import BottomBar from '@/components/layout/BottomBar.vue'
 import RightPanel from '@/components/layout/RightPanel.vue'
-import WhiteboardTabs from '@/components/whiteboard/WhiteboardTabs.vue'
 import WhiteboardCanvas from '@/components/whiteboard/WhiteboardCanvas.vue'
 import CameraPreview from '@/components/camera/CameraPreview.vue'
 import StreamSettings from '@/components/stream/StreamSettings.vue'
+import WhiteboardTabs from '@/components/whiteboard/WhiteboardTabs.vue'
 import DocViewer from '@/components/document/DocViewer.vue'
 import DocSidebar from '@/components/document/DocSidebar.vue'
 import ScreenSharePreview from '@/components/media/ScreenSharePreview.vue'
@@ -84,6 +84,19 @@ const coStream = useCoStream()
 
 // Provide coStream controls to RightPanel
 provide('coStream', coStream)
+
+// ── Canvas aspect ratio from stream resolution ────────────────────────────────
+// When the user picks a portrait resolution (e.g. 720x1280), constrain the
+// canvas-wrap to that aspect ratio so the authoring view matches the output.
+const canvasAspectRatio = computed(() => {
+  const [w, h] = streamStore.config.resolution.split('x').map(Number)
+  if (!w || !h) return null
+  return `${w} / ${h}`
+})
+const isPortraitMode = computed(() => {
+  const [w, h] = streamStore.config.resolution.split('x').map(Number)
+  return !!w && !!h && h > w
+})
 const whiteboardCanvasEl = ref<HTMLCanvasElement | null>(null)
 const docViewerRef = ref<{ loadFile: (f: File) => void; getVisibleCanvas: () => HTMLCanvasElement | null } | null>(null)
 
@@ -111,6 +124,12 @@ const showCloudDrive = ref(false)
 // Shared scroll position for document mode — DocViewer writes, WhiteboardCanvas reads
 const docScrollTop = ref(0)
 provide('docScrollTop', docScrollTop)
+
+// Sync canvas content visibility with camera maximize/restore
+watch(() => wbStore.isContentHidden, (hidden) => {
+  if (hidden) mediaStore.maximizeCamera()
+  else        mediaStore.restoreCamera()
+})
 
 // Doc drawer (document panel overlay)
 const docDrawerOpen = ref(false)
@@ -288,17 +307,26 @@ provide('onOpenSettings', () => { showSettings.value = true })
     <TopBar />
 
     <div class="app-layout__body">
-      <!-- Drawing toolbar — always visible; in document mode it shows the panel toggle -->
+      <!-- Drawing toolbar — always visible to keep layout width stable -->
       <LeftToolbar />
 
-      <div class="app-layout__canvas-area">
-        <WhiteboardTabs v-show="wbStore.activeMode !== 'document'" />
-        <div class="app-layout__canvas-wrap" @dragover="onCanvasDragOver" @drop="onCanvasDrop">
-          <!-- Document panel drawer — overlays the canvas from the left -->
-          <DocSidebar :open="docDrawerOpen" @close="docDrawerOpen = false" />
-          <WhiteboardCanvas v-show="wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document'" />
-          <ScreenSharePreview v-if="wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
-          <DocViewer ref="docViewerRef" v-show="wbStore.activeMode === 'document'" />
+      <div class="app-layout__canvas-area" :class="{ 'app-layout__canvas-area--portrait': isPortraitMode }">
+        <!-- Document panel drawer — lives in canvas-area so it always opens
+             from the left edge (next to LeftToolbar) regardless of portrait/landscape mode -->
+        <DocSidebar :open="docDrawerOpen && !wbStore.isContentHidden" @close="docDrawerOpen = false" />
+        <WhiteboardTabs
+          v-show="!wbStore.isContentHidden && wbStore.activeMode === 'whiteboard'"
+        />
+        <div
+          class="app-layout__canvas-wrap"
+          :class="{ 'app-layout__canvas-wrap--constrained': isPortraitMode }"
+          :style="canvasAspectRatio ? { aspectRatio: canvasAspectRatio } : {}"
+          @dragover="onCanvasDragOver"
+          @drop="onCanvasDrop"
+        >
+          <WhiteboardCanvas v-show="!wbStore.isContentHidden && (wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document')" />
+          <ScreenSharePreview v-if="!wbStore.isContentHidden && wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
+          <DocViewer ref="docViewerRef" v-show="!wbStore.isContentHidden && wbStore.activeMode === 'document'" />
           <!-- Co-stream participant grid overlay (always visible when there are guests) -->
           <CoStreamGrid v-if="coStreamStore.participantCount > 0" />
           <!-- Video insert UI preview (PiP or fullscreen overlay in canvas area) -->
@@ -403,11 +431,17 @@ provide('onOpenSettings', () => { showSettings.value = true })
   }
 
   &__canvas-area {
+    position: relative; // DocSidebar uses position:absolute relative to this
     display: flex;
     flex-direction: column;
     flex: 1;
     overflow: hidden;
     min-width: 0;
+
+    // Portrait mode: dark letterbox on the sides
+    &--portrait {
+      background: #1a1a1a;
+    }
   }
 
   &__canvas-wrap {
@@ -415,6 +449,18 @@ provide('onOpenSettings', () => { showSettings.value = true })
     flex: 1;
     overflow: hidden;
     min-height: 0;
+    width: 100%;
+
+    // Portrait mode: stay in flex flow (flex:1 gives correct height after
+    // WhiteboardTabs + BottomBar are accounted for), then let aspect-ratio
+    // derive width. align-self:center prevents the default stretch so the
+    // narrow portrait box sits centered with dark bars on both sides.
+    &--constrained {
+      flex: 1;
+      min-height: 0;
+      width: auto;
+      align-self: center;
+    }
   }
 }
 </style>

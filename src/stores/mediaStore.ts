@@ -29,6 +29,27 @@ export const useMediaStore = defineStore('media', () => {
     cameraPip.value = { ...cameraPip.value, ...patch }
   }
 
+  /** Whether the camera PiP is currently maximized to fill the full canvas area. */
+  const isCameraMaximized = ref(false)
+  /** Saved PiP position before maximizing, so we can restore it. */
+  let _savedPip: CameraPipPct | null = null
+
+  function maximizeCamera() {
+    if (isCameraMaximized.value) return
+    _savedPip = { ...cameraPip.value }
+    isCameraMaximized.value = true
+    updateCameraPip({ xPct: 0, yPct: 0, wPct: 1, hPct: 1 })
+  }
+
+  function restoreCamera() {
+    if (!isCameraMaximized.value) return
+    isCameraMaximized.value = false
+    if (_savedPip) {
+      updateCameraPip(_savedPip)
+      _savedPip = null
+    }
+  }
+
   const videoDevices = ref<MediaDeviceInfo[]>([])
   const audioDevices = ref<MediaDeviceInfo[]>([])
   const activeVideoDeviceId = ref<string>('')
@@ -268,7 +289,7 @@ export const useMediaStore = defineStore('media', () => {
     cameraStream, micStream, screenStream,
     isCameraOn, isMicOn, isScreenSharing, isCameraVisible,
     videoDevices, audioDevices, activeVideoDeviceId, activeAudioDeviceId,
-    cameraPip, updateCameraPip,
+    cameraPip, updateCameraPip, isCameraMaximized, maximizeCamera, restoreCamera,
     loadDevices, toggleCamera, toggleMic, switchCamera, switchMic,
     startScreenShare, stopScreenShare, toggleCameraVisibility,
     // video insert

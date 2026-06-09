@@ -279,6 +279,7 @@ function onThumbnailClick(page: number) {
     overflow: hidden;
     border: 2px solid transparent;
     transition: border-color 0.15s, transform 0.1s;
+    flex-shrink: 0; // prevent flex from squishing thumbnails to fit container height
 
     &:hover { border-color: rgba($color-accent, 0.5); transform: scale(1.02); }
     &.active { border-color: $color-accent; }
@@ -286,6 +287,7 @@ function onThumbnailClick(page: number) {
 
   &__thumb-img {
     width: 100%;
+    height: auto; // maintain aspect ratio (do not let flex distort proportions)
     display: block;
     border-radius: 2px;
   }

@@ -117,9 +117,14 @@ function onResizeUp() {
 const isFullscreen = ref(false)
 
 function onDblClick() {
-  // watchEffect below handles syncing pip percentages based on isFullscreen
   isFullscreen.value = !isFullscreen.value
 }
+
+// Keep local isFullscreen in sync with the store's isCameraMaximized
+// (triggered externally when whiteboard/document content is hidden).
+watch(() => mediaStore.isCameraMaximized, (maximized) => {
+  isFullscreen.value = maximized
+})
 
 // ─── Sync pos+size to store as percentages of container ─────────────────────
 // Mixer uses these percentages × output canvas dimensions, so the PiP keeps
@@ -170,11 +175,6 @@ function onWheel(e: WheelEvent) {
       playsinline
       class="camera-pip__video"
     />
-    <button
-      class="camera-pip__close"
-      title="隐藏预览"
-      @click.stop="mediaStore.toggleCameraVisibility"
-    >×</button>
     <!-- Resize handle — bottom-right corner -->
     <div
       class="camera-pip__resize"
@@ -205,30 +205,6 @@ function onWheel(e: WheelEvent) {
     display: block;
     transform: scaleX(-1);
   }
-
-  &__close {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    border: none;
-    color: #fff;
-    font-size: 15px;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.2s;
-    padding: 0;
-    z-index: 2;
-  }
-
-  &:hover &__close { opacity: 1; }
 
   // Resize handle — bottom-right corner triangle
   &__resize {

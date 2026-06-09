@@ -11,7 +11,7 @@ const zh = {
   lockPreview: '锁定预告', unlockPreview: '解锁预告', watchUrl: '观看地址',
   // BottomBar
   mic: '麦克风', camera: '摄像头', share: '共享',
-  cloudDrive: '云盘',
+  cloudDrive: '视频',
   whiteboard: '白板', addWhiteboard: '新建白板', document: '文档',
   startLive: '开始直播', endLive: '结束直播', restorePreview: '恢复预告',
   selectMic: '选择麦克风', selectCamera: '选择摄像头',
@@ -42,7 +42,7 @@ const en: typeof zh = {
   viewers: 'viewers', duration: 'Duration',
   lockPreview: 'Lock Preview', unlockPreview: 'Unlock Preview', watchUrl: 'Watch URL',
   mic: 'Mic', camera: 'Camera', share: 'Share',
-  cloudDrive: 'Cloud Drive',
+  cloudDrive: 'Video',
   whiteboard: 'Whiteboard', addWhiteboard: 'New Whiteboard', document: 'Document',
   startLive: 'Go Live', endLive: 'End Live', restorePreview: 'Restore Preview',
   selectMic: 'Select Microphone', selectCamera: 'Select Camera',

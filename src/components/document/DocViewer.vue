@@ -7,9 +7,51 @@ const { activeDoc, activeDocId, loadFile } = useDocManager()
 
 // Inject the shared scrollTop ref provided by App.vue so WhiteboardCanvas can sync
 const docScrollTop = inject<Ref<number>>('docScrollTop', ref(0))
+// Inject drawer state so we can auto-close it when a document loads or user clicks content
+const docDrawerOpen = inject<Ref<boolean>>('docDrawerOpen')
 
 const scrollWrap = ref<HTMLDivElement | null>(null)
 const isRendering = ref(false)
+
+// ─── Dedicated off-screen canvas for StreamMixer ──────────────────────────────
+// Always contains a clean copy of the currently dominant page so the stream
+// never flickers during smooth-scroll transitions between pages.
+const streamCanvas = document.createElement('canvas')
+
+/**
+ * Find the page occupying the most vertical space in the viewport and copy it
+ * to streamCanvas. Called on every scroll event and after rendering completes.
+ */
+function updateStreamCanvas() {
+  const wrap = scrollWrap.value
+  if (!wrap) return
+  const children = wrap.querySelectorAll<HTMLCanvasElement>('.doc-page')
+  if (!children.length) return
+
+  const wrapRect = wrap.getBoundingClientRect()
+  let bestPage: HTMLCanvasElement | null = null
+  let bestArea = -1
+
+  for (const c of children) {
+    const rect = c.getBoundingClientRect()
+    const visTop    = Math.max(rect.top,    wrapRect.top)
+    const visBottom = Math.min(rect.bottom, wrapRect.bottom)
+    const visArea   = Math.max(0, visBottom - visTop)
+    if (visArea > bestArea) {
+      bestArea = visArea
+      bestPage = c
+    }
+  }
+
+  if (!bestPage) return
+  // Resize stream canvas only when dimensions actually change (avoids GC churn)
+  if (streamCanvas.width !== bestPage.width || streamCanvas.height !== bestPage.height) {
+    streamCanvas.width  = bestPage.width
+    streamCanvas.height = bestPage.height
+  }
+  const ctx = streamCanvas.getContext('2d')
+  if (ctx) ctx.drawImage(bestPage, 0, 0)
+}
 
 // Re-render all pages whenever the active document changes
 watch(activeDocId, async () => {
@@ -18,6 +60,8 @@ watch(activeDocId, async () => {
     await renderAllPages()
   } else {
     if (scrollWrap.value) scrollWrap.value.innerHTML = ''
+    streamCanvas.width  = 0
+    streamCanvas.height = 0
   }
 })
 
@@ -31,7 +75,7 @@ watch(
     if (!wrap) return
     const canvases = wrap.querySelectorAll<HTMLCanvasElement>('.doc-page')
     const target = canvases[page - 1]
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (target) wrap.scrollTo({ top: target.offsetTop, behavior: 'smooth' })
   }
 )
 
@@ -63,31 +107,36 @@ async function renderAllPages() {
   }
 
   isRendering.value = false
+  // Seed stream canvas with the first page once rendering completes
+  updateStreamCanvas()
+  // Auto-collapse the document panel once the doc is rendered
+  if (docDrawerOpen) docDrawerOpen.value = false
 }
 
-/** Returns the first visible page canvas — used by StreamMixer for encoding */
+/**
+ * Returns the off-screen stream canvas — used by StreamMixer for encoding.
+ * Always contains the cleanest single-page snapshot (dominant visible page),
+ * preventing mid-scroll flickering in the output stream.
+ */
 function getVisibleCanvas(): HTMLCanvasElement | null {
-  const wrap = scrollWrap.value
-  if (!wrap) return null
-  // Return the first canvas that is within the visible scroll region
-  const children = wrap.querySelectorAll<HTMLCanvasElement>('.doc-page')
-  for (const c of children) {
-    const rect = c.getBoundingClientRect()
-    const wrapRect = wrap.getBoundingClientRect()
-    if (rect.bottom >= wrapRect.top && rect.top <= wrapRect.bottom) return c
-  }
-  return children[0] ?? null
+  return streamCanvas.width > 0 ? streamCanvas : null
 }
 
 // Sync scroll position so WhiteboardCanvas can offset its viewport transform to match
 function onScroll() {
-  if (scrollWrap.value) docScrollTop.value = scrollWrap.value.scrollTop
+  if (!scrollWrap.value) return
+  docScrollTop.value = scrollWrap.value.scrollTop
+  updateStreamCanvas()
 }
 
 // Reset scroll tracking when document changes
 watch(activeDocId, () => { docScrollTop.value = 0 })
 
 // Drag-and-drop directly onto the viewer
+function closeDrawer() {
+  if (docDrawerOpen) docDrawerOpen.value = false
+}
+
 function onDragOver(e: DragEvent) { e.preventDefault() }
 function onDrop(e: DragEvent) {
   e.preventDefault()
@@ -99,7 +148,7 @@ defineExpose({ loadFile, getVisibleCanvas })
 </script>
 
 <template>
-  <div class="doc-viewer" @dragover="onDragOver" @drop="onDrop">
+  <div class="doc-viewer" @dragover="onDragOver" @drop="onDrop" @click="closeDrawer">
     <!-- Empty state: no document open -->
     <div v-if="!activeDoc && !isRendering" class="doc-viewer__empty">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

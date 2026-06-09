@@ -16,7 +16,11 @@ const onMainAction   = inject<() => void>('onMainAction', () => {})
 const onOpenSettings = inject<() => void>('onOpenSettings', () => {})
 
 watch(() => mediaStore.isScreenSharing, (sharing) => {
-  if (!sharing && wbStore.activeMode === 'screen') wbStore.setActiveMode('whiteboard')
+  // Handles screen share ended via the browser's native "Stop sharing" button (track.onended)
+  // exitScreenMode is idempotent — safe to call even if already exited via button click
+  if (!sharing && wbStore.activeMode === 'screen') {
+    wbStore.exitScreenMode()
+  }
 })
 
 type DropdownTarget = 'camera' | 'mic' | null
@@ -62,12 +66,15 @@ async function handleScreenShare() {
   try {
     if (mediaStore.isScreenSharing) {
       mediaStore.stopScreenShare()
-      wbStore.setActiveMode('whiteboard')
+      wbStore.exitScreenMode()
     } else {
+      wbStore.enterScreenMode()   // saves isContentHidden before share starts
       await mediaStore.startScreenShare()
-      wbStore.setActiveMode('screen')
     }
-  } catch { /* cancelled */ }
+  } catch {
+    // User cancelled the picker — make sure mode is restored
+    if (wbStore.activeMode === 'screen') wbStore.exitScreenMode()
+  }
 }
 
 const mainBtnLabel = computed(() => {
@@ -215,7 +222,7 @@ const isLive = computed(() => streamStore.status === 'live')
         <span class="tool-btn__label">{{ t('share') }}</span>
       </button>
 
-      <!-- Cloud Drive -->
+      <!-- Video -->
       <button
         class="tool-btn"
         :class="{ 'tool-btn--active': mediaStore.isVideoInserting }"
@@ -224,7 +231,8 @@ const isLive = computed(() => streamStore.status === 'live')
       >
         <span class="tool-btn__icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"/>
+            <polygon points="10 9 10 15 16 12 10 9" fill="currentColor" stroke="none"/>
           </svg>
         </span>
         <span class="tool-btn__label">{{ t('cloudDrive') }}</span>
@@ -233,12 +241,21 @@ const isLive = computed(() => streamStore.status === 'live')
       <!-- Divider -->
       <div class="bottom-bar__divider" />
 
-      <!-- Whiteboard mode: switch to whiteboard; if already active, add a new page -->
+      <!-- Whiteboard mode:
+           · Not in whiteboard mode → switch to whiteboard
+           · In whiteboard mode → toggle content hidden/visible (camera maximize) -->
       <button
         class="tool-btn"
-        :class="{ 'tool-btn--mode': wbStore.activeMode === 'whiteboard' }"
-        :title="wbStore.activeMode === 'whiteboard' ? t('addWhiteboard') : t('whiteboard')"
-        @click="wbStore.activeMode === 'whiteboard' ? wbStore.addPage() : wbStore.setActiveMode('whiteboard')"
+        :class="{
+          'tool-btn--active': wbStore.activeMode === 'whiteboard' && !wbStore.isContentHidden,
+          'tool-btn--off':    wbStore.activeMode === 'whiteboard' &&  wbStore.isContentHidden,
+        }"
+        :title="wbStore.activeMode === 'whiteboard'
+          ? (wbStore.isContentHidden ? '显示白板' : '隐藏白板')
+          : t('whiteboard')"
+        @click="wbStore.activeMode === 'whiteboard'
+          ? wbStore.toggleContentHidden()
+          : wbStore.setActiveMode('whiteboard')"
       >
         <span class="tool-btn__icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -250,12 +267,21 @@ const isLive = computed(() => streamStore.status === 'live')
         <span class="tool-btn__label">{{ t('whiteboard') }}</span>
       </button>
 
-      <!-- Document mode -->
+      <!-- Document mode:
+           · Not in document mode → switch to document
+           · In document mode → toggle content hidden/visible (camera maximize) -->
       <button
         class="tool-btn"
-        :class="{ 'tool-btn--mode': wbStore.activeMode === 'document' }"
-        :title="t('document')"
-        @click="wbStore.setActiveMode('document')"
+        :class="{
+          'tool-btn--active': wbStore.activeMode === 'document' && !wbStore.isContentHidden,
+          'tool-btn--off':    wbStore.activeMode === 'document' &&  wbStore.isContentHidden,
+        }"
+        :title="wbStore.activeMode === 'document'
+          ? (wbStore.isContentHidden ? '显示文档' : '隐藏文档')
+          : t('document')"
+        @click="wbStore.activeMode === 'document'
+          ? wbStore.toggleContentHidden()
+          : wbStore.setActiveMode('document')"
       >
         <span class="tool-btn__icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -390,7 +416,7 @@ const isLive = computed(() => streamStore.status === 'live')
     }
   }
 
-  // Mode selector (whiteboard / document)
+  // Mode selector (whiteboard / document) — active & visible
   &--mode {
     color: $color-text-primary;
     background: $color-bg-active;
@@ -399,6 +425,7 @@ const isLive = computed(() => streamStore.status === 'live')
       background: $color-bg-hover;
     }
   }
+
 
   &__icon {
     display: flex;

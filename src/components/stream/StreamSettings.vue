@@ -26,7 +26,18 @@ function handleApply() {
   emit('update:visible', false)
 }
 
-const resolutions = ['854x480', '1280x720', '1920x1080'] as const
+const resolutions = {
+  landscape: [
+    { value: '854x480',   label: '480P  854 × 480' },
+    { value: '1280x720',  label: '720P  1280 × 720' },
+    { value: '1920x1080', label: '1080P  1920 × 1080' },
+  ],
+  portrait: [
+    { value: '480x854',   label: '480P  480 × 854' },
+    { value: '720x1280',  label: '720P  720 × 1280' },
+    { value: '1080x1920', label: '1080P  1080 × 1920' },
+  ],
+} as const
 const frameRates  = [15, 24, 30] as const
 const audioBitrates = [64, 128, 192] as const
 
@@ -95,7 +106,12 @@ const whipUrlHint = computed(() => {
               <div class="form-field">
                 <label>分辨率</label>
                 <select v-model="local.resolution" class="form-select">
-                  <option v-for="r in resolutions" :key="r" :value="r">{{ r }}</option>
+                  <optgroup label="横屏（适合 PC / 大屏观看）">
+                    <option v-for="r in resolutions.landscape" :key="r.value" :value="r.value">{{ r.label }}</option>
+                  </optgroup>
+                  <optgroup label="竖屏（适合手机端观看）">
+                    <option v-for="r in resolutions.portrait" :key="r.value" :value="r.value">{{ r.label }}</option>
+                  </optgroup>
                 </select>
               </div>
               <div class="form-field">
