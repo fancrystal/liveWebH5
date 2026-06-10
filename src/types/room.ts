@@ -5,5 +5,4 @@ export interface RoomInfo {
   viewerCount: number
   watchUrl: string
   language: 'zh-CN' | 'en-US'
-  isPreviewLocked: boolean
 }

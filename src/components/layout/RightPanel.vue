@@ -72,22 +72,16 @@ function toggleCoStream() {
   }
 }
 
-// Seed demo messages
 onMounted(() => {
-  const demos: Omit<ChatMessage, 'id'>[] = [
-    { roomId: 'room-1', senderId: 'u1', senderNickname: '小明', senderAvatar: '', content: '主播好！', type: 'text', timestamp: Date.now() - 60000, isPinned: false, isPrivate: false },
-    { roomId: 'room-1', senderId: 'u2', senderNickname: '学习达人', senderAvatar: '', content: '今天讲什么内容？', type: 'text', timestamp: Date.now() - 45000, isPinned: false, isPrivate: false },
-    { roomId: 'room-1', senderId: 'u3', senderNickname: 'Anna', senderAvatar: '', content: '白板功能好棒！', type: 'text', timestamp: Date.now() - 30000, isPinned: false, isPrivate: false },
-  ]
-  demos.forEach((d, i) => chatStore.addMessage({ ...d, id: `demo-${i}` }))
   chatStore.clearUnread()
   scrollToBottom()
 })
 
 // costream is hidden for now
+// product is hidden for this release (商品功能本版本不上线，恢复时取消注释即可)
 const tabs = computed(() => [
   { id: 'chat'    as const, label: t('chatTab') },
-  { id: 'product' as const, label: '商品' },
+  // { id: 'product' as const, label: '商品' },
 ])
 
 // ─── Product card ──────────────────────────────────────────────────────────
@@ -193,8 +187,29 @@ function toggleHighlight(id: string) {
         </div>
 
         <div ref="messagesEl" class="chat-messages">
-          <div v-if="chatStore.filteredMessages.length === 0" class="chat-messages__empty">
-            {{ t('noMessages') }}
+          <div v-if="chatStore.filteredMessages.length === 0" class="chat-empty">
+            <!-- Illustration: stacked chat bubbles -->
+            <svg class="chat-empty__illustration" width="96" height="84" viewBox="0 0 96 84" fill="none" aria-hidden="true">
+              <!-- back bubble -->
+              <path
+                d="M30 8h50a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H62l-8 9v-9H30a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z"
+                fill="currentColor" opacity="0.08"
+              />
+              <!-- front bubble -->
+              <path
+                d="M16 26h44a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H36l-9 10v-10H16a8 8 0 0 1-8-8V34a8 8 0 0 1 8-8z"
+                fill="currentColor" opacity="0.16"
+              />
+              <!-- typing dots in front bubble -->
+              <circle cx="26" cy="44" r="3.2" fill="currentColor" opacity="0.45"/>
+              <circle cx="38" cy="44" r="3.2" fill="currentColor" opacity="0.35"/>
+              <circle cx="50" cy="44" r="3.2" fill="currentColor" opacity="0.25"/>
+              <!-- sparkle accents -->
+              <path d="M84 52l1.8 4.2L90 58l-4.2 1.8L84 64l-1.8-4.2L78 58l4.2-1.8z" fill="currentColor" opacity="0.3"/>
+              <circle cx="14" cy="14" r="2.5" fill="currentColor" opacity="0.2"/>
+            </svg>
+            <div class="chat-empty__title">{{ t('emptyChatTitle') }}</div>
+            <div class="chat-empty__hint">{{ t('emptyChatHint') }}</div>
           </div>
           <!-- Overflow hint -->
           <div
@@ -583,13 +598,6 @@ function toggleHighlight(id: string) {
   flex-direction: column;
   gap: 10px;
 
-  &__empty {
-    color: $color-text-muted;
-    font-size: 13px;
-    text-align: center;
-    margin-top: 40px;
-  }
-
   &__overflow {
     padding: 4px 8px;
     font-size: 11px;
@@ -598,6 +606,34 @@ function toggleHighlight(id: string) {
     background: rgba($color-accent, 0.06);
     border-radius: 4px;
     flex-shrink: 0;
+  }
+}
+
+// ─── Chat empty state ────────────────────────────────────────────────────────
+.chat-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-bottom: 32px;   // optical centering — input bar below pulls weight down
+  color: $color-text-secondary;
+
+  &__illustration {
+    color: $color-text-primary;
+    margin-bottom: 12px;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 500;
+    color: $color-text-secondary;
+  }
+
+  &__hint {
+    font-size: 12px;
+    color: $color-text-muted;
   }
 }
 

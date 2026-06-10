@@ -178,11 +178,12 @@ function onProgressClick(e: MouseEvent) {
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
-  background: rgba($color-bg-panel, 0.95);
-  border: 1px solid $color-border;
+  background: $glass-bg;
+  border: 1px solid $glass-border;
   border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  box-shadow: $shadow-md;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   max-width: 640px;
   min-width: 440px;
 

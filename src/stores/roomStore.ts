@@ -25,7 +25,6 @@ export const useRoomStore = defineStore('room', () => {
     viewerCount: 0,
     watchUrl: '',
     language: 'zh-CN',
-    isPreviewLocked: false,
   })
 
   /** SaaS API base URL, e.g. https://mall-test.lxi-tech.com:15816 */
@@ -194,10 +193,6 @@ export const useRoomStore = defineStore('room', () => {
     room.value = { ...room.value, ...partial }
   }
 
-  function togglePreviewLock() {
-    room.value.isPreviewLocked = !room.value.isPreviewLocked
-  }
-
   return {
     room,
     sassUrl,
@@ -206,7 +201,6 @@ export const useRoomStore = defineStore('room', () => {
     username,
     pushStreamUrl,
     updateRoom,
-    togglePreviewLock,
     bootstrap,
     clearAuth,
   }

@@ -84,6 +84,22 @@ const mainBtnLabel = computed(() => {
 })
 
 const isLive = computed(() => streamStore.status === 'live')
+
+// ── End-live confirmation (mis-click protection) ──────────────────────────────
+const showEndConfirm = ref(false)
+
+function handleMainClick() {
+  if (isLive.value) {
+    showEndConfirm.value = true   // ending kicks all viewers — confirm first
+    return
+  }
+  onMainAction()
+}
+
+function confirmEndLive() {
+  showEndConfirm.value = false
+  onMainAction()
+}
 </script>
 
 <template>
@@ -304,11 +320,36 @@ const isLive = computed(() => streamStore.status === 'live')
         </svg>
       </button>
 
-      <button class="go-live-btn" :class="{ 'go-live-btn--end': isLive }" @click="onMainAction()">
+      <button class="go-live-btn" :class="{ 'go-live-btn--end': isLive }" @click="handleMainClick">
         <span v-if="!isLive" class="go-live-btn__dot" />
         {{ mainBtnLabel }}
       </button>
     </div>
+
+    <!-- End-live confirmation dialog -->
+    <Teleport to="body">
+      <div v-if="showEndConfirm" class="end-confirm-mask" @click.self="showEndConfirm = false">
+        <div class="end-confirm" role="alertdialog" aria-labelledby="end-confirm-title">
+          <div class="end-confirm__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div id="end-confirm-title" class="end-confirm__title">{{ t('endLiveConfirmTitle') }}</div>
+          <div class="end-confirm__desc">{{ t('endLiveConfirmDesc') }}</div>
+          <div class="end-confirm__actions">
+            <button class="end-confirm__btn end-confirm__btn--cancel" @click="showEndConfirm = false">
+              {{ t('cancel') }}
+            </button>
+            <button class="end-confirm__btn end-confirm__btn--danger" @click="confirmEndLive">
+              {{ t('endLive') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </footer>
 </template>
@@ -435,8 +476,9 @@ const isLive = computed(() => streamStore.status === 'live')
   }
 
   &__label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
+    letter-spacing: 0.02em;
     white-space: nowrap;
     line-height: 1;
   }
@@ -453,7 +495,7 @@ const isLive = computed(() => streamStore.status === 'live')
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 26px;   // ≥24px hit target — 18px was too easy to miss
   height: 52px;
   border-radius: 0 10px 10px 0;
   border: none;
@@ -486,10 +528,12 @@ const isLive = computed(() => streamStore.status === 'live')
   bottom: calc(100% + 10px);
   left: 0;
   min-width: 230px;
-  background: $color-bg-panel;
-  border: 1px solid $color-border;
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
   border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: $shadow-lg;
   overflow: hidden;
   z-index: 500;
 
@@ -552,7 +596,7 @@ const isLive = computed(() => streamStore.status === 'live')
   }
 }
 
-// ─── Go Live button ───────────────────────────────────────────────────────────
+// ─── Go Live button — the page's primary CTA, gradient + glow ─────────────────
 .go-live-btn {
   display: flex;
   align-items: center;
@@ -566,24 +610,25 @@ const isLive = computed(() => streamStore.status === 'live')
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
-  background: $color-accent;
+  background: linear-gradient(135deg, #4f8df9, $color-accent-hover);
   color: #fff;
   letter-spacing: 0.2px;
+  box-shadow: 0 4px 14px rgba($color-accent, 0.3);
 
   &:hover {
-    background: $color-accent-hover;
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba($color-accent, 0.4);
+    box-shadow: 0 6px 22px rgba($color-accent, 0.45);
+    filter: brightness(1.08);
   }
 
   &:active { transform: translateY(0); }
 
   &--end {
-    background: $color-danger;
+    background: linear-gradient(135deg, $color-danger, #dc2626);
+    box-shadow: 0 4px 14px rgba($color-danger, 0.3);
 
     &:hover {
-      background: #dc2626;
-      box-shadow: 0 4px 16px rgba($color-danger, 0.4);
+      box-shadow: 0 6px 22px rgba($color-danger, 0.45);
     }
   }
 
@@ -600,5 +645,93 @@ const isLive = computed(() => streamStore.status === 'live')
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.6; transform: scale(1); }
   50%       { opacity: 1;   transform: scale(1.25); }
+}
+
+// ─── End-live confirmation dialog ────────────────────────────────────────────
+.end-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;   // above settings modal (1000)
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.end-confirm {
+  width: 320px;
+  padding: 24px 24px 20px;
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
+  border-radius: 14px;
+  box-shadow: $shadow-lg;
+  text-align: center;
+
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    background: rgba($color-danger, 0.12);
+    color: $color-danger;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: $color-text-primary;
+    margin-bottom: 6px;
+  }
+
+  &__desc {
+    font-size: 13px;
+    line-height: 1.6;
+    color: $color-text-secondary;
+    margin-bottom: 18px;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  &__btn {
+    flex: 1;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    &--cancel {
+      background: $color-bg-active;
+      color: $color-text-secondary;
+
+      &:hover {
+        background: $color-bg-hover;
+        color: $color-text-primary;
+      }
+    }
+
+    &--danger {
+      background: linear-gradient(135deg, $color-danger, #dc2626);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba($color-danger, 0.3);
+
+      &:hover {
+        box-shadow: 0 4px 16px rgba($color-danger, 0.45);
+        filter: brightness(1.06);
+      }
+    }
+  }
 }
 </style>

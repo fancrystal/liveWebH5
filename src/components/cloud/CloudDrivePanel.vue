@@ -356,19 +356,23 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .cdp {
   width: 480px;
   max-height: 70vh;
-  background: $color-bg-panel;
-  border: 1px solid $color-border;
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
   border-radius: 16px 16px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: $shadow-lg;
 
   &__header {
     display: flex;

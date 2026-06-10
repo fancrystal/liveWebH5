@@ -5,15 +5,15 @@ $left-toolbar-width: 40px;
 $right-panel-width: 320px;
 $right-tab-width: 48px;
 
-// Colors
+// Colors — pure neutral grey dark palette (project preference)
 $color-bg-dark: #1a1a1a;
 $color-bg-panel: #242424;
 $color-bg-hover: #2e2e2e;
 $color-bg-active: #333333;
 $color-border: #3a3a3a;
 $color-text-primary: #ffffff;
-$color-text-secondary: #999999;
-$color-text-muted: #666666;
+$color-text-secondary: #a6a6a6;   // ≥4.5:1 on panel bg (was #999)
+$color-text-muted: #8c8c8c;       // ≥4.5:1 on panel bg (was #666 ≈ 2.4:1)
 $color-accent: #3b82f6;
 $color-accent-hover: #2563eb;
 $color-danger: #ef4444;
@@ -24,3 +24,13 @@ $color-warning: #f59e0b;
 $color-status-preview: #f59e0b;
 $color-status-live: #ef4444;
 $color-status-ended: #6b7280;
+
+// Elevation tokens — one consistent shadow scale for all floating surfaces
+$shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+$shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+$shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+// Glass surface for floating layers (dropdowns / modals / floating bars).
+// Pair with `backdrop-filter: blur(16px)`.
+$glass-bg: rgba(36, 36, 36, 0.88);
+$glass-border: rgba(255, 255, 255, 0.08);

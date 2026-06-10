@@ -3,9 +3,11 @@ import { reactive, watch, computed } from 'vue'
 import { useStreamStore } from '@/stores/streamStore'
 import { useMediaStore } from '@/stores/mediaStore'
 import type { StreamConfig } from '@/types/stream'
-import { supportsRTMP } from '@/utils/browser'
 
-const rtmpSupported = supportsRTMP()
+// This release ships WHIP-only (no RTMP), so there is no mode selector.
+// The push URL is server-issued; the field is shown for debugging in the
+// test environment only — set VITE_SHOW_PUSH_URL=false for real production.
+const showPushUrl = import.meta.env.VITE_SHOW_PUSH_URL === 'true'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [v: boolean]; apply: [cfg: StreamConfig] }>()
@@ -82,43 +84,19 @@ const whipUrlHint = computed(() => {
             直播进行中，推流参数已锁定（仅可切换摄像头/麦克风）。如需修改请先结束直播。
           </div>
 
-          <!-- Push mode -->
-          <div class="form-section">
-            <div class="form-label">推流方式</div>
-            <div class="radio-group">
-              <label class="radio-item" :class="{ disabled: isLive }">
-                <input v-model="local.mode" type="radio" value="webrtc" :disabled="isLive" />
-                <span>WebRTC (WHIP) — 超低延迟</span>
-              </label>
-              <label class="radio-item" :class="{ disabled: !rtmpSupported || isLive }">
-                <input v-model="local.mode" type="radio" value="rtmp" :disabled="!rtmpSupported || isLive" />
-                <span>RTMP — 广泛兼容{{ !rtmpSupported ? '（当前浏览器不支持）' : '' }}</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Push URL -->
-          <div class="form-section">
-            <div class="form-label">{{ local.mode === 'webrtc' ? 'WHIP 推流地址' : 'RTMP 推流地址' }}</div>
-            <template v-if="local.mode === 'webrtc'">
-              <input
-                v-model="local.whipUrl"
-                class="form-input"
-                :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
-                :disabled="isLive"
-                placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
-              />
-              <div v-if="whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
-                {{ whipUrlHint.text }}
-              </div>
-            </template>
+          <!-- Push URL — test-environment debugging only (VITE_SHOW_PUSH_URL) -->
+          <div v-if="showPushUrl" class="form-section">
+            <div class="form-label">WHIP 推流地址</div>
             <input
-              v-else
-              v-model="local.rtmpUrl"
+              v-model="local.whipUrl"
               class="form-input"
+              :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
               :disabled="isLive"
-              placeholder="rtmp://live.example.com/live/streamkey"
+              placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
             />
+            <div v-if="whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
+              {{ whipUrlHint.text }}
+            </div>
           </div>
 
           <!-- Video -->
@@ -224,7 +202,9 @@ const whipUrlHint = computed(() => {
 .modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,11 +213,13 @@ const whipUrlHint = computed(() => {
 
 .settings-modal {
   width: 480px;
-  background: $color-bg-panel;
-  border: 1px solid $color-border;
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: $shadow-lg;
 
   &__header {
     display: flex;
@@ -370,28 +352,6 @@ const whipUrlHint = computed(() => {
   justify-content: space-between;
   font-size: 11px;
   color: $color-text-muted;
-}
-
-.radio-group {
-  display: flex;
-  gap: 16px;
-}
-
-.radio-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: $color-text-primary;
-  cursor: pointer;
-
-  input { accent-color: $color-accent; cursor: pointer; }
-
-  &.disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-    input { cursor: not-allowed; }
-  }
 }
 
 .btn-cancel {

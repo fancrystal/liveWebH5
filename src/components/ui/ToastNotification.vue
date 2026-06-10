@@ -68,8 +68,10 @@ const { toasts, dismiss } = useToast()
   padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid transparent;
-  background: $color-bg-panel;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: $shadow-md;
   font-size: 13px;
   pointer-events: auto;
   min-width: 280px;

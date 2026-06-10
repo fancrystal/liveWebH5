@@ -105,7 +105,7 @@ function setupVideo(el: Element | null, stream: MediaStream | undefined) {
   &__cell {
     position: absolute;
     border: 2px solid rgba(255, 255, 255, 0.35);
-    background: #1a1a1a;
+    background: $color-bg-dark;
     overflow: hidden;
     pointer-events: auto;
   }

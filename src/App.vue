@@ -427,7 +427,7 @@ provide('onOpenSettings', () => { showSettings.value = true })
 
     // Portrait mode: dark letterbox on the sides
     &--portrait {
-      background: #1a1a1a;
+      background: $color-bg-dark;
     }
   }
 
@@ -437,6 +437,11 @@ provide('onOpenSettings', () => { showSettings.value = true })
     overflow: hidden;
     min-height: 0;
     width: 100%;
+    // Recess the bright canvas into the dark workspace instead of butting
+    // a white rectangle straight against the panels.
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 32px rgba(0, 0, 0, 0.45);
 
     // Portrait mode: stay in flex flow (flex:1 gives correct height after
     // WhiteboardTabs + BottomBar are accounted for), then let aspect-ratio
