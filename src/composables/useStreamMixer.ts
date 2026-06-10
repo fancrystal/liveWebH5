@@ -3,6 +3,7 @@ import { useMediaStore } from '@/stores/mediaStore'
 import { useCoStreamStore } from '@/stores/coStreamStore'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useStreamStore } from '@/stores/streamStore'
+import { useAudioPipeline } from '@/composables/useAudioPipeline'
 import { computeCoStreamLayout } from '@/utils/coStreamLayout'
 
 /**
@@ -14,6 +15,7 @@ export function useStreamMixer() {
   const coStreamStore = useCoStreamStore()
   const wbStore       = useWhiteboardStore()
   const streamStore   = useStreamStore()
+  const audioPipeline = useAudioPipeline()
 
   const outputCanvas = shallowRef<HTMLCanvasElement | null>(null)
   const outputStream = shallowRef<MediaStream | null>(null)
@@ -365,13 +367,16 @@ export function useStreamMixer() {
     drawWorker.onmessage = (e) => { if (e.data.type === 'tick') draw() }
     drawWorker.postMessage({ type: 'start', interval: FRAME_MS })
 
-    // Assemble output stream
+    // Assemble output stream.
+    // Audio comes from the persistent pipeline (ONE fixed track for the
+    // stream's whole life): RTCPeerConnection senders and MediaRecorder both
+    // break when the track set changes mid-stream, so mic/insert/screen audio
+    // changes happen inside the Web Audio graph instead of swapping tracks.
     const tracks: MediaStreamTrack[] = []
     const videoTrack = canvas.captureStream(TARGET_FPS).getVideoTracks()[0]
     if (videoTrack) tracks.push(videoTrack)
-    if (mediaStore.micStream) {
-      mediaStore.micStream.getAudioTracks().forEach(t => tracks.push(t))
-    }
+    const audioTrack = audioPipeline.getOutputTrack()
+    if (audioTrack) tracks.push(audioTrack)
 
     const stream = new MediaStream(tracks)
     outputStream.value = stream
@@ -426,7 +431,8 @@ export function useStreamMixer() {
       drawWorker.terminate()
       drawWorker = null
     }
-    // Only stop the canvas video track — mic tracks belong to mediaStore and must not be stopped here
+    // Only stop the canvas video track — the audio track belongs to the
+    // persistent audio pipeline and is reused across live sessions.
     outputStream.value?.getVideoTracks().forEach(t => t.stop())
     outputStream.value   = null
     outputCanvas.value   = null
@@ -436,13 +442,5 @@ export function useStreamMixer() {
     participantVideos.clear()
   }
 
-  function updateAudio() {
-    if (!outputStream.value) return
-    outputStream.value.getAudioTracks().forEach(t => outputStream.value!.removeTrack(t))
-    if (mediaStore.micStream) {
-      mediaStore.micStream.getAudioTracks().forEach(t => outputStream.value!.addTrack(t))
-    }
-  }
-
-  return { outputCanvas, outputStream, isRunning, start, stop, updateAudio }
+  return { outputCanvas, outputStream, isRunning, start, stop }
 }

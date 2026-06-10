@@ -28,7 +28,7 @@ import { useRTMP } from '@/composables/useRTMP'
 import { useCoStream } from '@/composables/useCoStream'
 import { useNetworkMonitor } from '@/composables/useNetworkMonitor'
 import { useToast } from '@/composables/useToast'
-import { useAudioMixer } from '@/composables/useAudioMixer'
+import { useAudioPipeline } from '@/composables/useAudioPipeline'
 import { isSafari, supportsRTMP } from '@/utils/browser'
 import { signalService } from '@/services/SignalService'
 import { useRoomStore } from '@/stores/roomStore'
@@ -111,12 +111,12 @@ function onCanvasDrop(e: DragEvent) {
   }
 }
 
-const mixer      = useStreamMixer()
-const webrtc     = useWebRTC()
-const rtmp       = useRTMP()
-const netMon     = useNetworkMonitor()
-const toast      = useToast()
-const audioMixer = useAudioMixer()
+const mixer         = useStreamMixer()
+const webrtc        = useWebRTC()
+const rtmp          = useRTMP()
+const netMon        = useNetworkMonitor()
+const toast         = useToast()
+const audioPipeline = useAudioPipeline()
 
 // Cloud drive panel visibility
 const showCloudDrive = ref(false)
@@ -192,33 +192,19 @@ onMounted(async () => {
   log('onMounted 完成')
 })
 
-// ── Video insert audio mixing ────────────────────────────────────────────────
-// When a video insert starts, mix the video's audio with the mic and replace
-// the audio track in the output stream so viewers hear both.
-// When the insert ends, restore the plain mic audio track.
-watch(() => mediaStore.isVideoInserting, (inserting) => {
-  if (!inserting) {
-    // Always release the AudioContext — even if streaming hasn't started yet,
-    // otherwise the AudioContext leaks when the user inserts then stops before
-    // clicking "开始直播".
-    audioMixer.stop()
-    // Restore plain mic track only when a stream is active
-    mixer.updateAudio()
-    return
-  }
-
-  // Only wire audio into the output stream if streaming is active
-  const outputStream = mixer.outputStream.value
-  if (!outputStream || !mediaStore.videoInsertEl) return
-
-  const mixedTrack = audioMixer.mix(
-    mediaStore.micStream,
-    mediaStore.videoInsertEl as HTMLVideoElement,
-  )
-  // Swap old audio tracks for the mixed track
-  outputStream.getAudioTracks().forEach(t => outputStream.removeTrack(t))
-  if (mixedTrack) outputStream.addTrack(mixedTrack)
-})
+// ── Audio source wiring (persistent pipeline) ────────────────────────────────
+// The output stream carries ONE fixed audio track (see useAudioPipeline):
+// swapping MediaStream tracks does not reach an active RTCPeerConnection and
+// breaks MediaRecorder, so mic / video-insert / screen-share audio connect and
+// disconnect inside the Web Audio graph instead. The wiring is independent of
+// live state — sources hooked up before "开始直播" are already in the mix.
+watch(() => mediaStore.micStream, (s) => audioPipeline.setMic(s), { immediate: true })
+watch(
+  () => mediaStore.videoInsertEl,
+  (el) => audioPipeline.setInsert(el as HTMLVideoElement | null),
+  { immediate: true },
+)
+watch(() => mediaStore.screenStream, (s) => audioPipeline.setScreen(s), { immediate: true })
 
 // Start / stop network monitoring alongside WebRTC
 watch(() => webrtc.pc.value, (conn) => {
@@ -251,6 +237,7 @@ async function handleStartLive() {
     () => docViewerRef.value?.getVisibleCanvas() ?? null,
     () => mediaStore.videoInsertEl,
   )
+
   streamStore.startLive()
 
   try {

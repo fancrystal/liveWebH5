@@ -370,8 +370,11 @@ export function useWebRTC() {
       console.log('[WebRTC] SDP answer received, length:', answerSdp.length)
       const remoteCandidates = answerSdp.match(/a=candidate:.*/g)
       if (remoteCandidates?.length) {
-        // eslint-disable-next-line no-console
-        console.log('[WebRTC] Remote ICE candidates:', remoteCandidates)
+        // Candidate lines contain server-side IPs — only dump them when verbose.
+        if (VERBOSE_LOG()) {
+          // eslint-disable-next-line no-console
+          console.log('[WebRTC] Remote ICE candidates:', remoteCandidates)
+        }
       } else {
         // eslint-disable-next-line no-console
         console.warn('[WebRTC] No ICE candidates in SDP answer.' +

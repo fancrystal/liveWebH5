@@ -25,7 +25,13 @@ export function useCoStream() {
 
   /** peerId → RTCPeerConnection */
   const pcs = new Map<string, RTCPeerConnection>()
+  /** peerId → pending disconnect-grace timer */
+  const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const isActive = ref(false)
+
+  // 'disconnected' is transient (NAT rebind / Wi-Fi handoff often self-heal in
+  // seconds) — wait before kicking, mirroring useWebRTC's grace period.
+  const DISCONNECT_GRACE_MS = 5_000
 
   /** signaling handler refs for cleanup */
   const sigHandlers = new Map<string, (...args: unknown[]) => void>()
@@ -57,9 +63,32 @@ export function useCoStream() {
     }
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      const state = pc.connectionState
+      if (pcs.get(peerId) !== pc) return   // superseded connection — ignore
+
+      if (state === 'connected') {
+        // Recovered within the grace period — cancel the pending kick
+        const timer = disconnectTimers.get(peerId)
+        if (timer) { clearTimeout(timer); disconnectTimers.delete(peerId) }
+        return
+      }
+
+      if (state === 'failed') {
+        // Definitive ICE/DTLS failure — remove immediately
         closePeer(peerId)
         coStreamStore.removeParticipant(peerId)
+        return
+      }
+
+      if (state === 'disconnected' && !disconnectTimers.has(peerId)) {
+        disconnectTimers.set(peerId, setTimeout(() => {
+          disconnectTimers.delete(peerId)
+          if (pcs.get(peerId) !== pc) return
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            closePeer(peerId)
+            coStreamStore.removeParticipant(peerId)
+          }
+        }, DISCONNECT_GRACE_MS))
       }
     }
 
@@ -89,6 +118,8 @@ export function useCoStream() {
   }
 
   function closePeer(peerId: string) {
+    const timer = disconnectTimers.get(peerId)
+    if (timer) { clearTimeout(timer); disconnectTimers.delete(peerId) }
     const pc = pcs.get(peerId)
     if (pc) { pc.close(); pcs.delete(peerId) }
   }

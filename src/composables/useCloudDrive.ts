@@ -143,9 +143,19 @@ export function useCloudDrive() {
       signal,
     })
 
+    if (res.status === 401) {
+      // Token expired/invalid — clear it so the stale cookie can't keep
+      // short-circuiting the next portal entry's code exchange.
+      roomStore.clearAuth()
+      throw new Error('登录已过期，请从管理后台重新进入直播间')
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
     const json: ListVideoRoomResponse = await res.json()
+    if (json.code === 401) {
+      roomStore.clearAuth()
+      throw new Error('登录已过期，请从管理后台重新进入直播间')
+    }
     if (json.code !== 200) throw new Error(json.msg || '接口返回错误')
 
     return {

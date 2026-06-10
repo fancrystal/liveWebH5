@@ -11,16 +11,31 @@ const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [v: boolean]; apply: [cfg: StreamConfig] }>()
 
 const mediaStore = useMediaStore()
-
-// Refresh device list each time the panel opens
-watch(() => props.visible, (v) => { if (v) mediaStore.loadDevices() }, { immediate: true })
-
 const streamStore = useStreamStore()
 
 // Local copy — only committed on "Apply"
 const local = reactive<StreamConfig>({ ...streamStore.config })
 
+// On every open: refresh devices and re-sync the local copy with the store
+// (config may have changed since setup, e.g. server-issued whipUrl).
+watch(() => props.visible, (v) => {
+  if (!v) return
+  mediaStore.loadDevices()
+  Object.assign(local, streamStore.config)
+}, { immediate: true })
+
+// Streaming params are locked while live: the mixer's output canvas size,
+// encoder bitrate and the push connection are all fixed at start — changing
+// them mid-stream would desync the host UI from what viewers actually see.
+const isLive = computed(() => streamStore.isStreaming)
+
 function handleApply() {
+  if (isLive.value) {
+    // Only device switching (handled live via its own @change) is allowed;
+    // discard any locked-field edits to keep config == actual stream state.
+    emit('update:visible', false)
+    return
+  }
   streamStore.updateConfig({ ...local })
   emit('apply', { ...local })
   emit('update:visible', false)
@@ -62,16 +77,21 @@ const whipUrlHint = computed(() => {
         </div>
 
         <div class="settings-modal__body">
+          <!-- Live lock notice -->
+          <div v-if="isLive" class="live-lock-banner">
+            直播进行中，推流参数已锁定（仅可切换摄像头/麦克风）。如需修改请先结束直播。
+          </div>
+
           <!-- Push mode -->
           <div class="form-section">
             <div class="form-label">推流方式</div>
             <div class="radio-group">
-              <label class="radio-item">
-                <input v-model="local.mode" type="radio" value="webrtc" />
+              <label class="radio-item" :class="{ disabled: isLive }">
+                <input v-model="local.mode" type="radio" value="webrtc" :disabled="isLive" />
                 <span>WebRTC (WHIP) — 超低延迟</span>
               </label>
-              <label class="radio-item" :class="{ disabled: !rtmpSupported }">
-                <input v-model="local.mode" type="radio" value="rtmp" :disabled="!rtmpSupported" />
+              <label class="radio-item" :class="{ disabled: !rtmpSupported || isLive }">
+                <input v-model="local.mode" type="radio" value="rtmp" :disabled="!rtmpSupported || isLive" />
                 <span>RTMP — 广泛兼容{{ !rtmpSupported ? '（当前浏览器不支持）' : '' }}</span>
               </label>
             </div>
@@ -85,6 +105,7 @@ const whipUrlHint = computed(() => {
                 v-model="local.whipUrl"
                 class="form-input"
                 :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
+                :disabled="isLive"
                 placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
               />
               <div v-if="whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
@@ -95,6 +116,7 @@ const whipUrlHint = computed(() => {
               v-else
               v-model="local.rtmpUrl"
               class="form-input"
+              :disabled="isLive"
               placeholder="rtmp://live.example.com/live/streamkey"
             />
           </div>
@@ -105,7 +127,7 @@ const whipUrlHint = computed(() => {
             <div class="form-row">
               <div class="form-field">
                 <label>分辨率</label>
-                <select v-model="local.resolution" class="form-select">
+                <select v-model="local.resolution" class="form-select" :disabled="isLive">
                   <optgroup label="横屏（适合 PC / 大屏观看）">
                     <option v-for="r in resolutions.landscape" :key="r.value" :value="r.value">{{ r.label }}</option>
                   </optgroup>
@@ -116,7 +138,7 @@ const whipUrlHint = computed(() => {
               </div>
               <div class="form-field">
                 <label>帧率</label>
-                <select v-model.number="local.frameRate" class="form-select">
+                <select v-model.number="local.frameRate" class="form-select" :disabled="isLive">
                   <option v-for="f in frameRates" :key="f" :value="f">{{ f }} fps</option>
                 </select>
               </div>
@@ -127,6 +149,7 @@ const whipUrlHint = computed(() => {
                 v-model.number="local.videoBitrate"
                 type="range" min="500" max="8000" step="100"
                 class="form-range"
+                :disabled="isLive"
               />
               <div class="range-labels"><span>500</span><span>8000</span></div>
             </div>
@@ -138,14 +161,14 @@ const whipUrlHint = computed(() => {
             <div class="form-row">
               <div class="form-field">
                 <label>采样率</label>
-                <select v-model.number="local.sampleRate" class="form-select">
+                <select v-model.number="local.sampleRate" class="form-select" :disabled="isLive">
                   <option :value="44100">44100 Hz</option>
                   <option :value="48000">48000 Hz</option>
                 </select>
               </div>
               <div class="form-field">
                 <label>音频码率</label>
-                <select v-model.number="local.audioBitrate" class="form-select">
+                <select v-model.number="local.audioBitrate" class="form-select" :disabled="isLive">
                   <option v-for="b in audioBitrates" :key="b" :value="b">{{ b }} kbps</option>
                 </select>
               </div>
@@ -322,6 +345,24 @@ const whipUrlHint = computed(() => {
 .form-range {
   width: 100%;
   accent-color: $color-accent;
+}
+
+.form-input:disabled,
+.form-select:disabled,
+.form-range:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.live-lock-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fbbf24;
 }
 
 .range-labels {

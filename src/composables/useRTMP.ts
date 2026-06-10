@@ -243,8 +243,13 @@ export function useRTMP() {
     if (!rtmpUrl) { error.value = 'RTMP 推流地址未配置'; return }
 
     const url = `${WS_ENDPOINT}?rtmp=${encodeURIComponent(rtmpUrl)}`
+    // RTMP URLs usually embed the stream key — never log them in full.
     // eslint-disable-next-line no-console
-    console.log('[RTMP] connecting WS', { url, attempt: reconnectCount })
+    console.log('[RTMP] connecting WS', {
+      endpoint: WS_ENDPOINT,
+      attempt:  reconnectCount,
+      ...(VERBOSE_LOG ? { url } : {}),
+    })
     const socket = new WebSocket(url)
     socket.binaryType = 'arraybuffer'
     ws.value = socket
@@ -324,11 +329,21 @@ export function useRTMP() {
 
   // ─── Public API ──────────────────────────────────────────────────────────────
 
+  /**
+   * Start publishing. Throws on synchronous validation failure (unsupported
+   * browser / missing RTMP URL) so the caller can roll back its live state —
+   * a silent return here would leave the UI stuck in "直播中" with no stream.
+   */
   function publish(stream: MediaStream) {
     if (!supportsRTMP()) {
-      error.value = '当前浏览器不支持 RTMP 推流（请使用 Chrome / Edge）'
-      toast.warn('Safari 不支持 RTMP 推流，请切换到 WebRTC 模式')
-      return
+      const msg = '当前浏览器不支持 RTMP 推流（请使用 Chrome / Edge 或切换到 WebRTC 模式）'
+      error.value = msg
+      throw new Error(msg)
+    }
+    if (!streamStore.config.rtmpUrl) {
+      const msg = 'RTMP 推流地址未配置'
+      error.value = msg
+      throw new Error(msg)
     }
     stopped          = false
     reconnectCount   = 0

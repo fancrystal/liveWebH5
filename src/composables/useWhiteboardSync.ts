@@ -90,15 +90,33 @@ export function useWhiteboardSync(
 
   // ─── Listen for incoming socket events ───────────────────────────────────
 
-  function startListening() {
+  // Max serialized size accepted for a remote canvas JSON (defense against a
+  // malicious/buggy peer DoS-ing the host with a giant payload).
+  const MAX_REMOTE_JSON_BYTES = 2_000_000
+
+  /** Basic sanity check on remote Fabric JSON before applying it. */
+  function isSafeFabricJson(json: unknown): json is object {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return false
+    try {
+      if (JSON.stringify(json).length > MAX_REMOTE_JSON_BYTES) return false
+    } catch {
+      return false   // circular / non-serializable — reject
+    }
+    return true
+  }
+
+  // Handlers are kept by reference so stopListening() can unregister the exact
+  // functions that were registered — off() with a different reference is a no-op.
+  const handlers: Record<string, (...args: unknown[]) => void> = {
     // Viewer requests full state on join
-    signalService.on('wb:request-full-state', () => {
+    'wb:request-full-state': () => {
       emitFullState()
-    })
+    },
 
     // Remote canvas patch (co-host or replay)
-    signalService.on('wb:patch', (data: unknown) => {
+    'wb:patch': (data: unknown) => {
       const { pageId, json } = data as { pageId: string; json: object }
+      if (typeof pageId !== 'string' || !isSafeFabricJson(json)) return
       applyingRemote = true
       try {
         if (pageId === wbStore.activePageId) {
@@ -111,50 +129,62 @@ export function useWhiteboardSync(
         // Reset flag after a tick so local watches don't echo back
         setTimeout(() => { applyingRemote = false }, 50)
       }
-    })
+    },
 
     // Remote page switch
-    signalService.on('wb:page-switch', (data: unknown) => {
+    'wb:page-switch': (data: unknown) => {
       const { pageId } = data as { pageId: string }
       applyingRemote = true
       wbStore.switchPage(pageId)
       setTimeout(() => { applyingRemote = false }, 50)
-    })
+    },
 
     // Remote page add
-    signalService.on('wb:page-add', (data: unknown) => {
+    'wb:page-add': (data: unknown) => {
       const { pageId, name } = data as { pageId: string; name: string }
       applyingRemote = true
       wbStore.addPageWithId(pageId, name)
       setTimeout(() => { applyingRemote = false }, 50)
-    })
+    },
 
     // Remote page remove
-    signalService.on('wb:page-remove', (data: unknown) => {
+    'wb:page-remove': (data: unknown) => {
       const { pageId } = data as { pageId: string }
       applyingRemote = true
       wbStore.removePage(pageId)
       setTimeout(() => { applyingRemote = false }, 50)
-    })
+    },
 
     // Full state from another host (reconnect scenario)
-    signalService.on('wb:full-state', (data: unknown) => {
+    'wb:full-state': (data: unknown) => {
       const { pages, activePageId } = data as {
         pages: Array<{ pageId: string; name: string; json: object }>
         activePageId: string
       }
+      if (!Array.isArray(pages) || typeof activePageId !== 'string') return
       applyingRemote = true
       pages.forEach(({ pageId, name, json }) => {
-        wbStore.addPageWithId(pageId, name, json)
+        if (typeof pageId !== 'string' || typeof name !== 'string') return
+        wbStore.addPageWithId(pageId, name, isSafeFabricJson(json) ? json : undefined)
       })
       wbStore.switchPage(activePageId)
       setTimeout(() => { applyingRemote = false }, 50)
-    })
+    },
+  }
+
+  let listening = false
+
+  function startListening() {
+    if (listening) return   // guard against double registration
+    listening = true
+    Object.entries(handlers).forEach(([event, fn]) => signalService.on(event, fn))
   }
 
   function stopListening() {
     if (debounceTimer) clearTimeout(debounceTimer)
-    signalService.off('wb:request-full-state', emitFullState)
+    if (!listening) return
+    listening = false
+    Object.entries(handlers).forEach(([event, fn]) => signalService.off(event, fn))
   }
 
   return { onLocalChange, startListening, stopListening }

@@ -71,6 +71,10 @@ async function shareDocument(file: CloudFile) {
       signal:  controller.signal,
     })
     clearTimeout(timer)
+    if (res.status === 401) {
+      roomStore.clearAuth()
+      throw new Error('登录已过期，请从管理后台重新进入直播间')
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const f    = new File([blob], file.name, { type: blob.type })

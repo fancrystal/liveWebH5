@@ -53,12 +53,19 @@ function updateStreamCanvas() {
   if (ctx) ctx.drawImage(bestPage, 0, 0)
 }
 
+// Render generation token — bumped whenever a new render starts or the doc
+// closes, so a superseded async render loop stops instead of appending its
+// pages into the freshly cleared (or re-populated) container.
+let renderGen = 0
+
 // Re-render all pages whenever the active document changes
 watch(activeDocId, async () => {
   await nextTick()
   if (activeDoc.value) {
     await renderAllPages()
   } else {
+    renderGen++   // cancel any in-flight render of the closed document
+    isRendering.value = false
     if (scrollWrap.value) scrollWrap.value.innerHTML = ''
     streamCanvas.width  = 0
     streamCanvas.height = 0
@@ -84,13 +91,16 @@ async function renderAllPages() {
   const wrap = scrollWrap.value
   if (!doc || !wrap) return
 
+  const gen = ++renderGen   // any newer render/close invalidates this loop
   isRendering.value = true
   wrap.innerHTML = ''
 
   const containerW = wrap.clientWidth || 800
 
   for (let i = 1; i <= doc.totalPages; i++) {
+    if (gen !== renderGen) return   // superseded — stop before touching the DOM
     const page = await doc.pdfDoc.getPage(i)
+    if (gen !== renderGen) return   // doc switched while awaiting getPage
     const vp0 = page.getViewport({ scale: 1 })
     const scale = (containerW - 32) / vp0.width
     const vp = page.getViewport({ scale })
@@ -106,6 +116,7 @@ async function renderAllPages() {
     await page.render({ canvasContext: ctx, viewport: vp, canvas }).promise
   }
 
+  if (gen !== renderGen) return    // superseded during the final page render
   isRendering.value = false
   // Seed stream canvas with the first page once rendering completes
   updateStreamCanvas()

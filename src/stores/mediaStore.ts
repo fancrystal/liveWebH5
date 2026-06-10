@@ -102,9 +102,18 @@ export const useMediaStore = defineStore('media', () => {
     cameraStream.value?.getVideoTracks().forEach(t => t.stop())
     cameraStream.value = null
     await new Promise(r => setTimeout(r, 80))
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } })
-    cameraStream.value = stream
-    isCameraVisible.value = true
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } })
+      cameraStream.value = stream
+      isCameraVisible.value = true
+    } catch (e) {
+      // The old stream is already stopped — leaving isCameraOn=true would show
+      // a frozen/black PiP with no way to recover except a confusing double-toggle.
+      isCameraOn.value      = false
+      isCameraVisible.value = false
+      // eslint-disable-next-line no-console
+      console.error('[mediaStore] switchCamera failed:', e)
+    }
   }
 
   async function switchMic(deviceId: string) {
@@ -112,13 +121,20 @@ export const useMediaStore = defineStore('media', () => {
     if (!isMicOn.value) return
     micStream.value?.getAudioTracks().forEach(t => t.stop())
     micStream.value = null
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: deviceId },
-        sampleRate: streamStore.config.sampleRate,
-      },
-    })
-    micStream.value = stream
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          sampleRate: streamStore.config.sampleRate,
+        },
+      })
+      micStream.value = stream
+    } catch (e) {
+      // Old mic is stopped — reflect reality so the mic button shows "off"
+      isMicOn.value = false
+      // eslint-disable-next-line no-console
+      console.error('[mediaStore] switchMic failed:', e)
+    }
   }
 
   async function startScreenShare() {
@@ -187,7 +203,7 @@ export const useMediaStore = defineStore('media', () => {
     v.crossOrigin = 'anonymous'
     v.src         = file.downloadUrl
     v.autoplay    = true
-    v.muted       = false          // audio is routed through useAudioMixer
+    v.muted       = false          // audio is routed through useAudioPipeline
     v.playsInline = true
     v.loop        = false
     // Hidden from UI — the preview component (VideoInsertPreview.vue) renders its

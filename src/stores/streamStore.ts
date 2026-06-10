@@ -39,7 +39,15 @@ export const useStreamStore = defineStore('stream', () => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   })
 
+  function clearDurationTimer() {
+    if (durationTimer) {
+      clearInterval(durationTimer)
+      durationTimer = null
+    }
+  }
+
   function startLive() {
+    clearDurationTimer()   // guard against double-start leaking the old timer
     status.value = 'live'
     isStreaming.value = true
     duration.value = 0
@@ -49,16 +57,14 @@ export const useStreamStore = defineStore('stream', () => {
   function endLive() {
     status.value = 'ended'
     isStreaming.value = false
-    if (durationTimer) {
-      clearInterval(durationTimer)
-      durationTimer = null
-    }
+    clearDurationTimer()
   }
 
   function restorePreview() {
     status.value = 'preview'
     isStreaming.value = false
     duration.value = 0
+    clearDurationTimer()   // handleEndLive() goes straight here, skipping endLive()
   }
 
   function updateConfig(partial: Partial<StreamConfig>) {
