@@ -224,7 +224,7 @@ function openCustomPicker() {
   }
 
   &__divider {
-    width: 24px;
+    width: 30px;
     height: 1px;
     background: $color-border;
     margin: 6px 0;
@@ -235,9 +235,9 @@ function openCustomPicker() {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
     border: none;
     background: transparent;
     color: $color-text-secondary;
@@ -284,8 +284,8 @@ function openCustomPicker() {
   }
 
   &__swatch {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 3px;
     border: 1.5px solid transparent;
     cursor: pointer;

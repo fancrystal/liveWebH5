@@ -490,14 +490,14 @@ function toggleHighlight(id: string) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    width: 40px;
-    height: 56px;
+    gap: 4px;
+    width: 50px;
+    height: 58px;
     border-radius: 8px;
     border: none;
     background: transparent;
     color: $color-text-secondary;
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.3;
     text-align: center;
     cursor: pointer;
@@ -509,7 +509,7 @@ function toggleHighlight(id: string) {
   }
 
   &__tab-label {
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.3;
   }
 

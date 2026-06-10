@@ -267,8 +267,14 @@ const BARS = 14
     <Teleport to="body">
       <div v-if="showSkipConfirm" class="dc-dialog-mask" @click.self="showSkipConfirm = false">
         <div class="dc-dialog">
-          <div class="dc-dialog__icon">⚠</div>
-          <div class="dc-dialog__title">确认跳过设备检测</div>
+          <div class="dc-dialog__header">
+            <svg class="dc-dialog__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div class="dc-dialog__title">确认跳过设备检测</div>
+          </div>
           <p class="dc-dialog__body">
             提示：设备异常仍可进行直播。请允许浏览器使用摄像头、麦克风权限，确认摄像头、麦克风未被占用。
           </p>
@@ -288,13 +294,20 @@ const BARS = 14
   inset: 0;
   background: $color-bg-dark;
   display: flex;
-  align-items: center;
   justify-content: center;
+  // Short viewports: let the MASK scroll instead of centering with
+  // align-items (which crops the card's top edge once it overflows).
+  overflow-y: auto;
+  padding: 24px 16px;
   z-index: 2000;
 }
 
 .dc-card {
   width: 480px;
+  max-width: 100%;
+  // margin:auto = safe centering — centers when there's room, top-aligns
+  // and scrolls when the viewport is shorter than the card.
+  margin: auto;
   background: $color-bg-panel;
   border: 1px solid $color-border;
   border-radius: 14px;
@@ -302,8 +315,16 @@ const BARS = 14
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-height: 90vh;
-  overflow-y: auto;
+
+  // Children must keep their natural height: flex would otherwise compress
+  // them when space runs short, squashing the preview and overlapping text.
+  > * { flex-shrink: 0; }
+
+  // Compact mode for short windows: tighter spacing, smaller preview
+  @media (max-height: 760px) {
+    gap: 14px;
+    padding: 20px 28px 18px;
+  }
 
   &__header {
     display: flex;
@@ -358,6 +379,13 @@ const BARS = 14
   background: #111;
   border-radius: 8px;
   overflow: hidden;
+
+  // Short windows: a fixed lower height (video center-crops via object-fit:
+  // cover) so the whole card fits with less scrolling.
+  @media (max-height: 760px) {
+    aspect-ratio: unset;
+    height: 180px;
+  }
 
   &__video {
     width: 100%;
@@ -467,17 +495,26 @@ const BARS = 14
 
 .dc-dialog {
   width: 360px;
-  background: $color-bg-panel;
-  border: 1px solid $color-border;
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
   border-radius: 12px;
-  padding: 28px 28px 22px;
+  padding: 24px 28px 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: $shadow-lg;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
   &__icon {
-    font-size: 22px;
     color: $color-warning;
+    flex-shrink: 0;
   }
 
   &__title {
