@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useStreamStore } from '@/stores/streamStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { useI18n } from '@/i18n'
+import { useToast } from '@/composables/useToast'
 
 const streamStore = useStreamStore()
 const roomStore = useRoomStore()
@@ -30,43 +31,69 @@ function onDocClick(e: MouseEvent) {
 onMounted(() => document.addEventListener('click', onDocClick, true))
 onUnmounted(() => document.removeEventListener('click', onDocClick, true))
 
-const statusClass = computed(() => ({
-  'bg-amber-500': streamStore.status === 'preview',
-  'bg-red-500': streamStore.status === 'live',
-  'bg-gray-500': streamStore.status === 'ended',
-}))
+// Title-bar status: while THIS page is pushing, local state wins (the host is
+// the stream source); otherwise show the server-issued roomState from the
+// detail API (1=预告 2=直播中 3=已结束).
+const roomStatus = computed<'upcoming' | 'live' | 'ended'>(() => {
+  if (streamStore.status === 'live') return 'live'
+  const s = roomStore.room.roomState
+  return s === 2 ? 'live' : s === 3 ? 'ended' : 'upcoming'
+})
+
+const statusClass = computed(() => `topbar__status--${roomStatus.value}`)
 
 const statusLabel = computed(() => {
-  if (streamStore.status === 'live') return t('live')
-  if (streamStore.status === 'ended') return t('ended')
+  if (roomStatus.value === 'live') return t('live')
+  if (roomStatus.value === 'ended') return t('ended')
   return t('upcoming')
 })
 
 const networkBars = computed(() => streamStore.networkQuality)
 
-function copyWatchUrl() {
-  if (roomStore.room.watchUrl) {
-    navigator.clipboard.writeText(roomStore.room.watchUrl)
+// ── Watch URL dialog ──────────────────────────────────────────────────────────
+const toast = useToast()
+const showWatchUrl = ref(false)
+
+function onWatchUrlClick() {
+  if (!roomStore.room.watchUrl) {
+    toast.info(t('noWatchUrl'))
+    return
+  }
+  showWatchUrl.value = true
+}
+
+async function copyWatchUrl() {
+  try {
+    await navigator.clipboard.writeText(roomStore.room.watchUrl)
+    toast.success(t('watchUrlCopied'))
+  } catch {
+    toast.error(t('copyFailed'))
   }
 }
 </script>
 
 <template>
   <header class="topbar no-select">
-    <!-- Left: room name + status -->
+    <!-- Left: room name + status + room number + host -->
     <div class="topbar__left">
       <span class="topbar__room-name">{{ roomStore.room.name }}</span>
       <span class="topbar__status" :class="statusClass">{{ statusLabel }}</span>
-    </div>
+      <span v-if="roomStore.room.roomNumber" class="topbar__meta">
+        <span class="topbar__meta-dot" />
+        {{ t('roomNumberLabel') }}：{{ roomStore.room.roomNumber }}
+      </span>
+      <span v-if="roomStore.room.hostName" class="topbar__meta">
+        {{ t('hostLabel') }}：{{ roomStore.room.hostName }}
+      </span>
 
-    <!-- Center: viewer count + network + duration -->
-    <div class="topbar__center">
+      <!-- 观看人数：接口暂不支持，先隐藏，恢复时取消注释即可
       <span class="topbar__viewers">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
         </svg>
         {{ streamStore.viewerCount }} {{ t('viewers') }}
       </span>
+      -->
 
       <span class="topbar__network">
         <span
@@ -77,7 +104,7 @@ function copyWatchUrl() {
         />
       </span>
 
-      <span class="topbar__duration">{{ t('duration') }} {{ streamStore.formattedDuration }}</span>
+      <span class="topbar__meta">{{ t('duration') }} {{ streamStore.formattedDuration }}</span>
     </div>
 
     <!-- Right: controls -->
@@ -121,13 +148,33 @@ function copyWatchUrl() {
         </div>
       </div>
 
-      <button class="topbar__btn" @click="copyWatchUrl">
+      <button class="topbar__btn" @click="onWatchUrlClick">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
         </svg>
         {{ t('watchUrl') }}
       </button>
+
+      <!-- Watch URL dialog -->
+      <Teleport to="body">
+        <div v-if="showWatchUrl" class="watch-url-mask" @click.self="showWatchUrl = false">
+          <div class="watch-url" role="dialog" aria-labelledby="watch-url-title">
+            <div class="watch-url__header">
+              <span id="watch-url-title" class="watch-url__title">{{ t('watchUrl') }}</span>
+              <button class="watch-url__close" @click="showWatchUrl = false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div class="watch-url__body">
+              <input class="watch-url__input" :value="roomStore.room.watchUrl" readonly @focus="($event.target as HTMLInputElement).select()" />
+              <button class="watch-url__copy" @click="copyWatchUrl">{{ t('copyLink') }}</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </header>
 </template>
@@ -146,7 +193,7 @@ function copyWatchUrl() {
   &__left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 18px;   // roomy spacing between name / status / room-id / host / duration
     min-width: 0;
   }
 
@@ -168,20 +215,33 @@ function copyWatchUrl() {
     color: #fff;
     white-space: nowrap;
 
+    // 状态配色与管理后台一致：预告橙 / 直播中蓝 / 已结束灰
+    &--upcoming { background: $color-warning; }
+    &--ended    { background: $color-status-ended; }
+
     // Live: soft expanding pulse ring so the on-air state is unmissable
-    &.bg-red-500 {
+    &--live {
+      background: $color-accent;
       animation: live-pulse 2s ease-in-out infinite;
     }
   }
 
-  &__center {
+  &__meta {
     display: flex;
     align-items: center;
-    gap: 16px;
-    color: $color-text-secondary;
+    gap: 6px;
     font-size: 13px;
-    // Counters tick every second — tabular digits stop the layout jitter
+    color: $color-text-secondary;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
+  }
+
+  &__meta-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: $color-accent;
+    flex-shrink: 0;
   }
 
   &__viewers {
@@ -209,10 +269,6 @@ function copyWatchUrl() {
     &:nth-child(4) { height: 14px; }
 
     &.active { background: $color-success; }
-  }
-
-  &__duration {
-    white-space: nowrap;
   }
 
   &__right {
@@ -303,7 +359,97 @@ function copyWatchUrl() {
 }
 
 @keyframes live-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
-  50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+  50%      { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+
+// ─── Watch URL dialog ────────────────────────────────────────────────────────
+.watch-url-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.watch-url {
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  background: $glass-bg;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $glass-border;
+  border-radius: 12px;
+  box-shadow: $shadow-lg;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid $color-border;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: $color-text-primary;
+  }
+
+  &__close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: $color-text-muted;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    &:hover { background: $color-bg-hover; color: $color-text-primary; }
+  }
+
+  &__body {
+    display: flex;
+    gap: 10px;
+    padding: 16px 18px 18px;
+  }
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    background: $color-bg-dark;
+    border: 1px solid $color-border;
+    border-radius: 7px;
+    color: $color-text-primary;
+    font-size: 13px;
+    outline: none;
+
+    &:focus { border-color: $color-accent; }
+  }
+
+  &__copy {
+    flex-shrink: 0;
+    padding: 0 16px;
+    background: $color-accent;
+    border: none;
+    border-radius: 7px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    &:hover { background: $color-accent-hover; }
+  }
 }
 </style>

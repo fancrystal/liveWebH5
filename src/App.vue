@@ -125,11 +125,13 @@ const showCloudDrive = ref(false)
 const docScrollTop = ref(0)
 provide('docScrollTop', docScrollTop)
 
-// Sync canvas content visibility with camera maximize/restore
+// Sync canvas content visibility with camera maximize/restore.
+// immediate: isContentHidden defaults to true (camera-first entry scene), so
+// the camera PiP must be maximized on startup, not only on later toggles.
 watch(() => wbStore.isContentHidden, (hidden) => {
   if (hidden) mediaStore.maximizeCamera()
   else        mediaStore.restoreCamera()
-})
+}, { immediate: true })
 
 // Doc drawer (document panel overlay)
 const docDrawerOpen = ref(false)
@@ -162,6 +164,11 @@ onMounted(async () => {
     } else {
       log('未获取到 pushStreamUrl，沿用默认 whipUrl =', streamStore.config.whipUrl)
     }
+
+    // Fill the title bar (room name / state / room number / host) from the
+    // detail API. Fire-and-forget: it falls back to test data internally and
+    // must not block entering the room.
+    roomStore.loadRoomDetail()
   } catch (e) {
     authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
     authState.value = 'error'
@@ -294,32 +301,40 @@ provide('onOpenSettings', () => { showSettings.value = true })
     <TopBar />
 
     <div class="app-layout__body">
-      <!-- Drawing toolbar — always visible to keep layout width stable -->
-      <LeftToolbar />
+      <!-- Main column: (toolbar + canvas) row on top, BottomBar below.
+           BottomBar spans the full column width so toggling the toolbar's
+           visibility never shifts the control bar horizontally. -->
+      <div class="app-layout__main">
+        <div class="app-layout__work">
+          <!-- Drawing toolbar — hidden in the camera-maximized scene (no canvas to draw on) -->
+          <LeftToolbar v-show="!wbStore.isContentHidden" />
 
-      <div class="app-layout__canvas-area" :class="{ 'app-layout__canvas-area--portrait': isPortraitMode }">
-        <!-- Document panel drawer — lives in canvas-area so it always opens
-             from the left edge (next to LeftToolbar) regardless of portrait/landscape mode -->
-        <DocSidebar :open="docDrawerOpen && !wbStore.isContentHidden" @close="docDrawerOpen = false" />
-        <WhiteboardTabs
-          v-show="!wbStore.isContentHidden && wbStore.activeMode === 'whiteboard'"
-        />
-        <div
-          class="app-layout__canvas-wrap"
-          :class="{ 'app-layout__canvas-wrap--constrained': isPortraitMode }"
-          :style="canvasAspectRatio ? { aspectRatio: canvasAspectRatio } : {}"
-          @dragover="onCanvasDragOver"
-          @drop="onCanvasDrop"
-        >
-          <WhiteboardCanvas v-show="!wbStore.isContentHidden && (wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document')" />
-          <ScreenSharePreview v-if="!wbStore.isContentHidden && wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
-          <DocViewer ref="docViewerRef" v-show="!wbStore.isContentHidden && wbStore.activeMode === 'document'" />
-          <!-- Co-stream participant grid overlay (always visible when there are guests) -->
-          <CoStreamGrid v-if="coStreamStore.participantCount > 0" />
-          <!-- Video insert UI preview (PiP or fullscreen overlay in canvas area) -->
-          <VideoInsertPreview />
-          <CameraPreview />
+          <div class="app-layout__canvas-area" :class="{ 'app-layout__canvas-area--portrait': isPortraitMode }">
+            <!-- Document panel drawer — lives in canvas-area so it always opens
+                 from the left edge (next to LeftToolbar) regardless of portrait/landscape mode -->
+            <DocSidebar :open="docDrawerOpen && !wbStore.isContentHidden" @close="docDrawerOpen = false" />
+            <WhiteboardTabs
+              v-show="!wbStore.isContentHidden && wbStore.activeMode === 'whiteboard'"
+            />
+            <div
+              class="app-layout__canvas-wrap"
+              :class="{ 'app-layout__canvas-wrap--constrained': isPortraitMode }"
+              :style="canvasAspectRatio ? { aspectRatio: canvasAspectRatio } : {}"
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            >
+              <WhiteboardCanvas v-show="!wbStore.isContentHidden && (wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document')" />
+              <ScreenSharePreview v-if="!wbStore.isContentHidden && wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
+              <DocViewer ref="docViewerRef" v-show="!wbStore.isContentHidden && wbStore.activeMode === 'document'" />
+              <!-- Co-stream participant grid overlay (always visible when there are guests) -->
+              <CoStreamGrid v-if="coStreamStore.participantCount > 0" />
+              <!-- Video insert UI preview (PiP or fullscreen overlay in canvas area) -->
+              <VideoInsertPreview />
+              <CameraPreview />
+            </div>
+          </div>
         </div>
+
         <BottomBar @open-cloud-drive="showCloudDrive = true" />
       </div>
 
@@ -415,6 +430,23 @@ provide('onOpenSettings', () => { showSettings.value = true })
     flex: 1;
     overflow: hidden;
     min-height: 0;
+  }
+
+  // Main column (everything left of RightPanel): work row + BottomBar.
+  &__main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  // Work row: LeftToolbar + canvas area.
+  &__work {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   &__canvas-area {

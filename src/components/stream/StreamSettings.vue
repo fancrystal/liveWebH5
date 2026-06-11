@@ -5,9 +5,10 @@ import { useMediaStore } from '@/stores/mediaStore'
 import type { StreamConfig } from '@/types/stream'
 
 // This release ships WHIP-only (no RTMP), so there is no mode selector.
-// The push URL is server-issued; the field is shown for debugging in the
-// test environment only — set VITE_SHOW_PUSH_URL=false for real production.
-const showPushUrl = import.meta.env.VITE_SHOW_PUSH_URL === 'true'
+// The push URL is server-issued. Editing it is a test-environment debugging
+// affordance — production shows the field read-only (greyed out):
+// set VITE_PUSH_URL_EDITABLE=false for real production.
+const pushUrlEditable = import.meta.env.VITE_PUSH_URL_EDITABLE === 'true'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [v: boolean]; apply: [cfg: StreamConfig] }>()
@@ -84,17 +85,19 @@ const whipUrlHint = computed(() => {
             直播进行中，推流参数已锁定（仅可切换摄像头/麦克风）。如需修改请先结束直播。
           </div>
 
-          <!-- Push URL — test-environment debugging only (VITE_SHOW_PUSH_URL) -->
-          <div v-if="showPushUrl" class="form-section">
+          <!-- Push URL — editable only in test env (VITE_PUSH_URL_EDITABLE);
+               production shows the server-issued address read-only -->
+          <div class="form-section">
             <div class="form-label">WHIP 推流地址</div>
             <input
               v-model="local.whipUrl"
               class="form-input"
-              :class="{ 'form-input--warn': whipUrlHint?.type === 'warn' }"
-              :disabled="isLive"
+              :class="{ 'form-input--warn': pushUrlEditable && whipUrlHint?.type === 'warn' }"
+              :disabled="isLive || !pushUrlEditable"
+              :title="pushUrlEditable ? '' : '推流地址由服务端下发，不可修改'"
               placeholder="http://your-srs:1985/rtc/v1/whip/?app=live&stream=key"
             />
-            <div v-if="whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
+            <div v-if="pushUrlEditable && whipUrlHint" class="form-hint" :class="`form-hint--${whipUrlHint.type}`">
               {{ whipUrlHint.text }}
             </div>
           </div>

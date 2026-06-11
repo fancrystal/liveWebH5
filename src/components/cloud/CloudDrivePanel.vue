@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useCloudDrive } from '@/composables/useCloudDrive'
 import { useMediaStore } from '@/stores/mediaStore'
-import { useDocManager } from '@/composables/useDocManager'
+import { useDocManager, MAX_DOC_FILE_MB } from '@/composables/useDocManager'
 import { useRoomStore } from '@/stores/roomStore'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useToast } from '@/composables/useToast'
@@ -76,6 +76,16 @@ async function shareDocument(file: CloudFile) {
       throw new Error('登录已过期，请从管理后台重新进入直播间')
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    // Pre-check via Content-Length (when the CDN exposes it) so an oversized
+    // doc is rejected before downloading the whole body — loadFile() re-checks
+    // the real size afterwards either way.
+    const contentLength = Number(res.headers.get('content-length') ?? 0)
+    if (contentLength > MAX_DOC_FILE_MB * 1024 * 1024) {
+      controller.abort()
+      throw new Error(
+        `文档大小 ${(contentLength / 1024 / 1024).toFixed(1)}MB 超过 ${MAX_DOC_FILE_MB}MB 上限，请压缩或拆分后再试`,
+      )
+    }
     const blob = await res.blob()
     const f    = new File([blob], file.name, { type: blob.type })
     const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
@@ -117,17 +127,20 @@ function onLocalFileChange(e: Event) {
   input.value = ''
 }
 
+/** Normalize a duration to HH:MM:SS (e.g. "00:00:12"). */
 function formatDuration(d: string): string {
   if (!d) return ''
-  // "00:30:45" → strip leading zeros for h/m
-  const parts = d.split(':')
-  if (parts.length === 3) {
-    const [h, m, s] = parts
-    if (h !== '00') return `${parseInt(h)}h ${parseInt(m)}m`
-    if (m !== '00') return `${parseInt(m)}m ${parseInt(s)}s`
-    return `${parseInt(s)}s`
+  const pad = (n: number) => String(n).padStart(2, '0')
+  // Colon format ("0:30:45" / "30:45") — pad each part to 2 digits
+  if (d.includes(':')) {
+    const parts = d.split(':').map(p => parseInt(p) || 0)
+    while (parts.length < 3) parts.unshift(0)
+    return parts.map(pad).join(':')
   }
-  return d
+  // Plain seconds count ("149") → HH:MM:SS
+  const total = parseInt(d)
+  if (Number.isNaN(total)) return d
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
 }
 </script>
 
@@ -141,7 +154,7 @@ function formatDuration(d: string): string {
             <rect x="2" y="4" width="20" height="16" rx="2" ry="2"/>
             <polygon points="10 9 10 15 16 12 10 9" fill="currentColor" stroke="none"/>
           </svg>
-          视频文件
+          插播视频
         </span>
         <button class="cdp__close" @click="emit('close')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -163,7 +176,7 @@ function formatDuration(d: string): string {
         />
       </div>
 
-      <!-- Tabs -->
+      <!-- Tabs：文档 tab 本版本不上线，tab 栏整体隐藏（仅剩视频），恢复时取消注释
       <div class="cdp__tabs">
         <button
           class="cdp__tab"
@@ -180,6 +193,7 @@ function formatDuration(d: string): string {
           文档 ({{ documentFiles.length }})
         </button>
       </div>
+      -->
 
       <!-- File list -->
       <div class="cdp__list">
@@ -342,7 +356,6 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
           </svg>
           上传本地视频插播
         </button>
-        <span class="cdp__local-hint">不依赖视频库，直接从本机选取 mp4 插播</span>
       </div>
     </div>
   </div>
@@ -354,7 +367,7 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
   inset: 0;
   z-index: 600;
   display: flex;
-  align-items: flex-end;
+  align-items: center;   // centered dialog (was bottom-sheet style)
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(4px);
@@ -368,7 +381,7 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid $glass-border;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;

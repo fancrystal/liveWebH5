@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { RoomInfo } from '@/types/room'
 import { exchangeCodeForToken } from '@/services/authService'
+import { fetchRoomDetail } from '@/services/roomService'
 import { getCookie, setCookie, deleteCookie } from '@/utils/cookie'
 
 /** Cookie key holding the session token (persists across page refresh). */
@@ -17,6 +18,14 @@ function log(...args: unknown[]): void {
   if (VERBOSE_LOG) console.log('[roomStore]', ...args)
 }
 
+/** Test-data fallback shown when there is no roomInfoId or the detail API fails. */
+const FALLBACK_ROOM_DETAIL = {
+  name:       '开发测试',
+  roomNumber: '9996181',
+  hostName:   '大安科技',
+  roomState:  1,   // 预告
+} as const
+
 export const useRoomStore = defineStore('room', () => {
   const room = ref<RoomInfo>({
     id: '',
@@ -25,6 +34,9 @@ export const useRoomStore = defineStore('room', () => {
     viewerCount: 0,
     watchUrl: '',
     language: 'zh-CN',
+    roomNumber: '',
+    hostName: '',
+    roomState: 1,
   })
 
   /** SaaS API base URL, e.g. https://mall-test.lxi-tech.com:15816 */
@@ -179,6 +191,36 @@ export const useRoomStore = defineStore('room', () => {
     history.replaceState(null, '', clean.toString())
   }
 
+  /**
+   * Load the live-room detail (title / state / room number / host) for the
+   * top bar. Called once after bootstrap succeeds.
+   *
+   * Falls back to test data when:
+   *   - there is no roomInfoId / token (dev entry without portal redirect), or
+   *   - the detail API fails (so the title bar never shows blanks).
+   */
+  async function loadRoomDetail(): Promise<void> {
+    if (!room.value.id || !sassUrl.value || !token.value) {
+      log('loadRoomDetail: 缺少 roomInfoId/sassUrl/token，使用测试数据填充')
+      updateRoom({ ...FALLBACK_ROOM_DETAIL })
+      return
+    }
+    try {
+      const d = await fetchRoomDetail(sassUrl.value, token.value, room.value.id)
+      updateRoom({
+        name:       d.roomTitle || room.value.name,
+        roomNumber: d.roomNumber,
+        hostName:   d.hostName,
+        roomState:  d.roomState,
+        watchUrl:   d.watchUrl,
+      })
+      log('loadRoomDetail: 成功 →', d.roomTitle, '| state =', d.roomState, '| roomNumber =', d.roomNumber)
+    } catch (err) {
+      log('loadRoomDetail: 失败，使用测试数据填充 |', err instanceof Error ? err.message : err)
+      updateRoom({ ...FALLBACK_ROOM_DETAIL })
+    }
+  }
+
   /** Clear the session token (e.g. on 401). Forces a re-login on next entry. */
   function clearAuth(): void {
     token.value = ''
@@ -202,6 +244,7 @@ export const useRoomStore = defineStore('room', () => {
     pushStreamUrl,
     updateRoom,
     bootstrap,
+    loadRoomDetail,
     clearAuth,
   }
 })

@@ -64,8 +64,10 @@ export const useWhiteboardStore = defineStore('whiteboard', () => {
 
   // ── Content visibility (camera-maximize / whiteboard-hide) ─────────────────
   /** Whether the main canvas content (whiteboard/document) is visually hidden
-   *  so the camera can fill the full canvas area. */
-  const isContentHidden = ref(false)
+   *  so the camera can fill the full canvas area.
+   *  Defaults to true: entering the room starts with the camera maximized;
+   *  the host opens the whiteboard explicitly via the bottom-bar button. */
+  const isContentHidden = ref(true)
 
   function toggleContentHidden() {
     isContentHidden.value = !isContentHidden.value

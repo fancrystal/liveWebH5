@@ -264,7 +264,6 @@ function confirmEndLive() {
         class="tool-btn"
         :class="{
           'tool-btn--active': wbStore.activeMode === 'whiteboard' && !wbStore.isContentHidden,
-          'tool-btn--off':    wbStore.activeMode === 'whiteboard' &&  wbStore.isContentHidden,
         }"
         :title="wbStore.activeMode === 'whiteboard'
           ? (wbStore.isContentHidden ? '显示白板' : '隐藏白板')
@@ -290,7 +289,6 @@ function confirmEndLive() {
         class="tool-btn"
         :class="{
           'tool-btn--active': wbStore.activeMode === 'document' && !wbStore.isContentHidden,
-          'tool-btn--off':    wbStore.activeMode === 'document' &&  wbStore.isContentHidden,
         }"
         :title="wbStore.activeMode === 'document'
           ? (wbStore.isContentHidden ? '显示文档' : '隐藏文档')
@@ -338,7 +336,6 @@ function confirmEndLive() {
             </svg>
           </div>
           <div id="end-confirm-title" class="end-confirm__title">{{ t('endLiveConfirmTitle') }}</div>
-          <div class="end-confirm__desc">{{ t('endLiveConfirmDesc') }}</div>
           <div class="end-confirm__actions">
             <button class="end-confirm__btn end-confirm__btn--cancel" @click="showEndConfirm = false">
               {{ t('cancel') }}
@@ -687,13 +684,6 @@ function confirmEndLive() {
     font-size: 15px;
     font-weight: 600;
     color: $color-text-primary;
-    margin-bottom: 6px;
-  }
-
-  &__desc {
-    font-size: 13px;
-    line-height: 1.6;
-    color: $color-text-secondary;
     margin-bottom: 18px;
   }
 

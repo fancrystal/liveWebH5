@@ -178,11 +178,14 @@ function toggleHighlight(id: string) {
               :class="{ active: chatStore.filter === 'all' }"
               @click="chatStore.setFilter('all'); chatStore.clearUnread()"
             >{{ t('publicChat') }}</button>
+            <!-- 私聊互动：本版本不上线，恢复时取消注释即可
             <button
               class="panel-header__tab"
               :class="{ active: chatStore.filter === 'private' }"
               @click="chatStore.setFilter('private')"
             >{{ t('privateChat') }}</button>
+            -->
+
           </div>
         </div>
 

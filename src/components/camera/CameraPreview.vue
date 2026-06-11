@@ -122,9 +122,12 @@ function onDblClick() {
 
 // Keep local isFullscreen in sync with the store's isCameraMaximized
 // (triggered externally when whiteboard/document content is hidden).
+// immediate: the store may already be maximized BEFORE this component mounts
+// (camera-first default scene) — without it the PiP would render windowed and
+// overwrite the store's fullscreen percentages via the watchEffect below.
 watch(() => mediaStore.isCameraMaximized, (maximized) => {
   isFullscreen.value = maximized
-})
+}, { immediate: true })
 
 // ─── Sync pos+size to store as percentages of container ─────────────────────
 // Mixer uses these percentages × output canvas dimensions, so the PiP keeps

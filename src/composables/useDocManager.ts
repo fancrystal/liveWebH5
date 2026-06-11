@@ -1,10 +1,17 @@
 import { ref, computed, markRaw } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
+import { useToast } from '@/composables/useToast'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
   import.meta.url
 ).href
+
+// Document limits — every page is rendered to a resident canvas (~2-3MB each),
+// so the page cap is what actually protects tab memory; the size cap matches
+// the nginx upload limit (client_max_body_size 50m) for consistency.
+export const MAX_DOC_FILE_MB = 50
+export const MAX_DOC_PAGES   = 150
 
 export interface DocEntry {
   id: string
@@ -25,16 +32,32 @@ const isLoading = ref(false)
 const activeDoc = computed<DocEntry | null>(() => (openDocs.value.find(d => d.id === activeDocId.value) ?? null) as any)
 
 async function loadFile(file: File): Promise<void> {
+  const toast = useToast()
   // Cloud-drive blobs may carry a generic MIME (e.g. application/octet-stream);
   // fall back to the file extension so PDFs aren't silently dropped.
   const isPdf =
     file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
   if (!isPdf) return
+
+  if (file.size > MAX_DOC_FILE_MB * 1024 * 1024) {
+    toast.error(
+      `文档大小 ${(file.size / 1024 / 1024).toFixed(1)}MB 超过 ${MAX_DOC_FILE_MB}MB 上限，请压缩或拆分后再试`,
+    )
+    return
+  }
+
   isLoading.value = true
   try {
     const buffer = await file.arrayBuffer()
     const pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise
     const totalPages = pdfDoc.numPages
+
+    if (totalPages > MAX_DOC_PAGES) {
+      pdfDoc.destroy()
+      toast.error(`文档共 ${totalPages} 页，超过 ${MAX_DOC_PAGES} 页上限，请拆分后再试`)
+      return
+    }
+
     const thumbnails: string[] = []
 
     for (let i = 1; i <= totalPages; i++) {
