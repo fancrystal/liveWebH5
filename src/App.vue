@@ -138,9 +138,11 @@ const docDrawerOpen = ref(false)
 provide('docDrawerOpen', docDrawerOpen)
 provide('toggleDocDrawer', () => { docDrawerOpen.value = !docDrawerOpen.value })
 
-// Close the drawer automatically when leaving document mode
+// Entering document mode (e.g. clicking the 文档 button) opens the panel so
+// the page list / upload entry is immediately visible; leaving closes it.
+// (DocViewer still auto-collapses it once a document finishes rendering.)
 watch(() => wbStore.activeMode, (mode) => {
-  if (mode !== 'document') docDrawerOpen.value = false
+  docDrawerOpen.value = mode === 'document'
 })
 
 onMounted(async () => {
