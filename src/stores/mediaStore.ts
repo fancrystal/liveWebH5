@@ -56,9 +56,14 @@ export const useMediaStore = defineStore('media', () => {
   const activeAudioDeviceId = ref<string>('')
 
   async function loadDevices() {
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    videoDevices.value = filterRealDevices(devices.filter(d => d.kind === 'videoinput'))
-    audioDevices.value = filterRealDevices(devices.filter(d => d.kind === 'audioinput'))
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      videoDevices.value = filterRealDevices(devices.filter(d => d.kind === 'videoinput'))
+      audioDevices.value = filterRealDevices(devices.filter(d => d.kind === 'audioinput'))
+    } catch {
+      // enumerateDevices can fail before any permission is granted or in non-secure contexts.
+      // Keep the existing list so the dropdown still opens with cached / empty state.
+    }
   }
 
   async function toggleCamera() {
@@ -200,12 +205,13 @@ export const useMediaStore = defineStore('media', () => {
     // Setting src first triggers a CORS-unaware request; drawImage on the
     // resulting canvas will throw SecurityError on captureStream().
     // Note: blob: URLs are same-origin — crossOrigin='anonymous' is harmless for them.
-    v.crossOrigin = 'anonymous'
-    v.src         = file.downloadUrl
-    v.autoplay    = true
-    v.muted       = false          // audio is routed through useAudioPipeline
-    v.playsInline = true
-    v.loop        = false
+    v.crossOrigin            = 'anonymous'
+    v.src                    = file.downloadUrl
+    v.autoplay               = true
+    v.muted                  = false          // audio is routed through useAudioPipeline
+    v.playsInline            = true
+    v.loop                   = false
+    v.disablePictureInPicture = true          // suppress Edge/Chrome native PiP overlay
     // Hidden from UI — the preview component (VideoInsertPreview.vue) renders its
     // own <video> with the same src URL.  ctx.drawImage() works fine with
     // display:none elements so the mixer is unaffected.
@@ -224,6 +230,9 @@ export const useMediaStore = defineStore('media', () => {
 
   // Track blob URL so we can revoke it when the insert ends
   let _blobUrl: string | null = null
+
+  /** Local files inserted this session — persists across panel open/close. */
+  const localInsertHistory = ref<File[]>([])
 
   /** Stop the current video insert and clean up the <video> element. */
   function stopVideoInsert() {
@@ -250,6 +259,11 @@ export const useMediaStore = defineStore('media', () => {
   function startLocalFileInsert(file: File, mode: VideoInsertMode = 'pip') {
     // Revoke any previous blob URL first
     if (_blobUrl) { URL.revokeObjectURL(_blobUrl); _blobUrl = null }
+
+    // Persist to history so the panel can show it after reopening (deduplicate by name+size)
+    if (!localInsertHistory.value.find(f => f.name === file.name && f.size === file.size)) {
+      localInsertHistory.value = [...localInsertHistory.value, file]
+    }
 
     const blobUrl = URL.createObjectURL(file)
     _blobUrl = blobUrl
@@ -278,11 +292,12 @@ export const useMediaStore = defineStore('media', () => {
 
     const v = document.createElement('video')
     // Do NOT set crossOrigin for blob: URLs — they are same-origin by definition
-    v.src         = blobUrl
-    v.autoplay    = true
-    v.muted       = false
-    v.playsInline = true
-    v.loop        = false
+    v.src                    = blobUrl
+    v.autoplay               = true
+    v.muted                  = false
+    v.playsInline            = true
+    v.loop                   = false
+    v.disablePictureInPicture = true          // suppress Edge/Chrome native PiP overlay
     // Off-screen (not display:none) so captureStream() produces real frames
     v.style.display = 'none'
     document.body.appendChild(v)
@@ -311,6 +326,6 @@ export const useMediaStore = defineStore('media', () => {
     // video insert
     videoInsertEl, videoInsertMode, videoInsertFile, isVideoInserting,
     startVideoInsert, startLocalFileInsert, stopVideoInsert, switchVideoInsertMode,
-    videoPip, updateVideoPip,
+    videoPip, updateVideoPip, localInsertHistory,
   }
 })

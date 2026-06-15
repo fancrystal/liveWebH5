@@ -107,6 +107,11 @@ async function shareDocument(file: CloudFile) {
 }
 
 // ── Local file insert ───────────────────────────────────────────────────────
+function reinsertLocalFile(file: File, mode: VideoInsertMode) {
+  mediaStore.startLocalFileInsert(file, mode)
+  emit('close')
+}
+
 const localFileInput = ref<HTMLInputElement | null>(null)
 
 function pickLocalFile() {
@@ -234,7 +239,45 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
 
         <!-- Video tab -->
         <template v-else-if="activeTab === 'video'">
-          <div v-if="videoFiles.length === 0" class="cdp__state">
+          <!-- Local insert history -->
+          <template v-if="mediaStore.localInsertHistory.length > 0">
+            <div class="cdp__section-label">本地视频</div>
+            <div
+              v-for="file in mediaStore.localInsertHistory"
+              :key="`local-${file.name}-${file.size}`"
+              class="cdp__item"
+            >
+              <div class="cdp__thumb">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+                <span class="cdp__local-badge">本地</span>
+              </div>
+              <div class="cdp__info">
+                <div class="cdp__name" :title="file.name">{{ file.name }}</div>
+                <div class="cdp__meta">{{ (file.size / 1024 / 1024).toFixed(1) }} MB</div>
+              </div>
+              <div class="cdp__actions">
+                <button class="cdp__action-btn cdp__action-btn--pip" title="画中画插播" @click="reinsertLocalFile(file, 'pip')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <rect x="14" y="10" width="7" height="5" rx="1"/>
+                  </svg>
+                  画中画
+                </button>
+                <button class="cdp__action-btn cdp__action-btn--fs" title="全屏插播" @click="reinsertLocalFile(file, 'fullscreen')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                    <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                  </svg>
+                  全屏
+                </button>
+              </div>
+            </div>
+            <div v-if="videoFiles.length > 0" class="cdp__section-label">云端视频</div>
+          </template>
+
+          <div v-if="videoFiles.length === 0 && mediaStore.localInsertHistory.length === 0" class="cdp__state">
             <span>暂无视频文件</span>
           </div>
           <div
@@ -659,6 +702,31 @@ VITE_DEV_ROOM_ID=your-room-id</pre>
     &--pip  { &:hover { border-color: $color-accent;   color: $color-accent; } }
     &--fs   { &:hover { border-color: $color-warning;  color: $color-warning; } }
     &--share { &:hover { border-color: $color-success; color: $color-success; } }
+  }
+
+  &__section-label {
+    padding: 8px 16px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: $color-text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+
+    &:first-child { padding-top: 4px; }
+  }
+
+  &__local-badge {
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    background: rgba($color-accent, 0.85);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 1.4;
+    letter-spacing: 0.3px;
   }
 
   &__load-more {

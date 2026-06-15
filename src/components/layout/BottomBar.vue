@@ -26,10 +26,13 @@ watch(() => mediaStore.isScreenSharing, (sharing) => {
 type DropdownTarget = 'camera' | 'mic' | null
 const openDropdown = ref<DropdownTarget>(null)
 
-async function toggleDropdown(target: DropdownTarget) {
+function toggleDropdown(target: DropdownTarget) {
   if (openDropdown.value === target) { openDropdown.value = null; return }
-  await mediaStore.loadDevices()
+  // Open immediately so the click is never blocked by an async delay,
+  // then refresh the device list in the background — Vue will reactively
+  // update the dropdown items once enumerateDevices() resolves.
   openDropdown.value = target
+  mediaStore.loadDevices().catch(() => {})
 }
 
 function closeDropdown() { openDropdown.value = null }
@@ -394,6 +397,7 @@ function confirmEndLive() {
   border-top: 1px solid $color-border;
   flex-shrink: 0;
   position: relative;
+  z-index: 50; // above camera-pip fullscreen (z-index: 30) so device dropdowns are visible
 
   &__center {
     display: flex;

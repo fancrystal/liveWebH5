@@ -176,6 +176,7 @@ function onWheel(e: WheelEvent) {
       autoplay
       muted
       playsinline
+      disablepictureinpicture
       class="camera-pip__video"
     />
     <!-- Resize handle — bottom-right corner -->
@@ -207,6 +208,10 @@ function onWheel(e: WheelEvent) {
     object-fit: cover;
     display: block;
     transform: scaleX(-1);
+
+    // Suppress Edge/Chrome built-in video overlay (PiP button, play overlay, etc.)
+    &::-webkit-media-controls             { display: none !important; }
+    &::-webkit-media-controls-enclosure  { display: none !important; }
   }
 
   // Resize handle — bottom-right corner triangle
