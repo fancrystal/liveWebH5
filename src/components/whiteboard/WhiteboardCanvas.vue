@@ -3,9 +3,11 @@ import { ref, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useWhiteboardStore } from '@/stores/whiteboardStore'
 import { useWhiteboard } from '@/composables/useWhiteboard'
 import { useWhiteboardSync } from '@/composables/useWhiteboardSync'
+import { useDocManager } from '@/composables/useDocManager'
 import type { Ref } from 'vue'
 
 const wbStore = useWhiteboardStore()
+const { activeDocId } = useDocManager()
 
 // Injected from App.vue — tracks DocViewer's scrollTop so we can keep annotations
 // aligned with the PDF content regardless of scroll position.
@@ -43,6 +45,13 @@ function applyDocScroll(scrollTop: number) {
 }
 
 watch(docScrollTop, (top) => applyDocScroll(top))
+
+// Clear annotations when switching between documents so marks from one PDF
+// do not bleed into another. Only fires in document mode.
+watch(activeDocId, () => {
+  if (!fc.value || wbStore.activeMode !== 'document') return
+  clearCanvas()
+})
 
 // When entering document mode: apply current scroll and reset annotation history
 // so that undo only covers strokes drawn on the document, not prior whiteboard ops.

@@ -104,7 +104,10 @@ const whipUrlHint = computed(() => {
 
           <!-- Video -->
           <div class="form-section">
-            <div class="form-label">视频设置</div>
+            <div class="form-label">
+              视频设置
+              <span class="form-label__hint" title="实际清晰度按摄像头设备的支持程度为准">?</span>
+            </div>
             <div class="form-row">
               <div class="form-field">
                 <label>分辨率</label>
@@ -216,9 +219,9 @@ const whipUrlHint = computed(() => {
 
 .settings-modal {
   width: 480px;
-  background: $glass-bg;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(28, 28, 28, 0.97);   // near-opaque so canvas doesn't bleed through
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid $glass-border;
   border-radius: 12px;
   overflow: hidden;
@@ -278,11 +281,34 @@ const whipUrlHint = computed(() => {
 }
 
 .form-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-weight: 600;
   color: $color-text-muted;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+
+  &__hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid $color-text-muted;
+    font-size: 10px;
+    font-weight: 600;
+    color: $color-text-muted;
+    cursor: help;
+    flex-shrink: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1;
+
+    &:hover { border-color: $color-text-secondary; color: $color-text-secondary; }
+  }
 }
 
 .form-row {

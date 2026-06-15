@@ -62,11 +62,12 @@ async function handleMicToggle() {
   try { await mediaStore.toggleMic() } catch { /* denied */ }
 }
 
+const showStopShareConfirm = ref(false)
+
 async function handleScreenShare() {
   try {
     if (mediaStore.isScreenSharing) {
-      mediaStore.stopScreenShare()
-      wbStore.exitScreenMode()
+      showStopShareConfirm.value = true   // confirm before stopping — prevents mis-click
     } else {
       wbStore.enterScreenMode()   // saves isContentHidden before share starts
       await mediaStore.startScreenShare()
@@ -75,6 +76,12 @@ async function handleScreenShare() {
     // User cancelled the picker — make sure mode is restored
     if (wbStore.activeMode === 'screen') wbStore.exitScreenMode()
   }
+}
+
+function confirmStopShare() {
+  showStopShareConfirm.value = false
+  mediaStore.stopScreenShare()
+  wbStore.exitScreenMode()
 }
 
 const mainBtnLabel = computed(() => {
@@ -342,6 +349,30 @@ function confirmEndLive() {
             </button>
             <button class="end-confirm__btn end-confirm__btn--danger" @click="confirmEndLive">
               {{ t('endLive') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Stop screen-share confirmation dialog -->
+    <Teleport to="body">
+      <div v-if="showStopShareConfirm" class="end-confirm-mask" @click.self="showStopShareConfirm = false">
+        <div class="end-confirm" role="alertdialog" aria-labelledby="stop-share-title">
+          <div class="end-confirm__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div id="stop-share-title" class="end-confirm__title">确定停止共享屏幕？</div>
+          <div class="end-confirm__actions">
+            <button class="end-confirm__btn end-confirm__btn--cancel" @click="showStopShareConfirm = false">
+              {{ t('cancel') }}
+            </button>
+            <button class="end-confirm__btn end-confirm__btn--danger" @click="confirmStopShare">
+              停止共享
             </button>
           </div>
         </div>

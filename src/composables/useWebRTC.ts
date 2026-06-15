@@ -78,6 +78,9 @@ export function useWebRTC() {
   let reconnectCount      = 0
   let stopped             = false
   let reconnecting        = false   // guard — prevent parallel scheduleReconnect() calls
+  // WHIP resource URL returned in Location header after a successful POST.
+  // Must be DELETE-d when stopping so the server releases the stream slot (prevents 406 on re-start).
+  let whipResourceUrl:    string | null = null
 
   // Hysteresis state (reset per connection)
   let lastQualitySample:       NetQuality = 'good'
@@ -358,9 +361,22 @@ export function useWebRTC() {
         ? `WHIP 地址不存在 (404)。SRS 格式：/rtc/v1/whip/?app=live&stream=名称`
         : res.status === 400
           ? `WHIP 请求格式错误 (400)${detail ? '：' + detail : ''}`
-          : `WHIP 服务器返回 ${res.status}${detail ? '：' + detail : ''}`
+          : res.status === 406
+            ? `WHIP 服务器拒绝推流 (406: ${detail || 'already publishing'})。请检查推流地址是否被占用，或稍候重试。`
+            : `WHIP 服务器返回 ${res.status}${detail ? '：' + detail : ''}`
       error.value = msg
       throw new Error(msg)
+    }
+
+    // Save the resource URL (Location header) so we can DELETE it on stop()
+    // to release the server-side session and prevent 406 on the next publish.
+    const location = res.headers.get('Location')
+    if (location) {
+      whipResourceUrl = location.startsWith('http')
+        ? location
+        : new URL(location, whipUrl).href
+    } else {
+      whipResourceUrl = whipUrl   // fallback: some servers re-use the push URL
     }
 
     let answerSdp: string
@@ -446,11 +462,12 @@ export function useWebRTC() {
   // ─── Public API ──────────────────────────────────────────────────────────────
 
   async function publish(stream: MediaStream) {
-    stopped        = false
-    reconnecting   = false
-    reconnectCount = 0
-    activeStream   = stream
-    error.value    = null
+    stopped          = false
+    reconnecting     = false
+    reconnectCount   = 0
+    activeStream     = stream
+    error.value      = null
+    whipResourceUrl  = null   // clear any stale resource URL from a previous session
     await _connect(stream)
   }
 
@@ -459,6 +476,15 @@ export function useWebRTC() {
     if (reconnectTimer)    { clearTimeout(reconnectTimer);    reconnectTimer    = null }
     if (disconnectedTimer) { clearTimeout(disconnectedTimer); disconnectedTimer = null }
     stopStatsPolling()
+
+    // Release the server-side WHIP session before closing the peer connection.
+    // Without this DELETE the server keeps the slot occupied and returns 406
+    // ("already publishing") the next time the host tries to go live.
+    if (whipResourceUrl) {
+      fetch(whipResourceUrl, { method: 'DELETE' }).catch(() => {})
+      whipResourceUrl = null
+    }
+
     pc.value?.close()
     pc.value          = null
     activeStream      = null

@@ -35,7 +35,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true))
 // the stream source); otherwise show the server-issued roomState from the
 // detail API (1=预告 2=直播中 3=已结束).
 const roomStatus = computed<'upcoming' | 'live' | 'ended'>(() => {
-  if (streamStore.status === 'live') return 'live'
+  if (streamStore.status === 'live')  return 'live'
+  if (streamStore.status === 'ended') return 'ended'
   const s = roomStore.room.roomState
   return s === 2 ? 'live' : s === 3 ? 'ended' : 'upcoming'
 })
