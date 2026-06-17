@@ -215,9 +215,9 @@ export const useRoomStore = defineStore('room', () => {
         roomState:  d.roomState,
         watchUrl:   d.watchUrl,
       })
-      // videoScreenMode: 0=横屏  1=竖屏 — 自动选对应的默认分辨率
+      // videoScreenMode: 1=横屏  2=竖屏 — 自动选对应的默认分辨率
       const streamStore = useStreamStore()
-      const isPortrait = d.videoScreenMode === 1
+      const isPortrait = d.videoScreenMode === 2
       streamStore.updateConfig({ resolution: isPortrait ? '720x1280' : '1280x720' })
       log('loadRoomDetail: 成功 →', d.roomTitle, '| state =', d.roomState, '| screenMode =', d.videoScreenMode)
     } catch (err) {

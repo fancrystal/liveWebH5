@@ -25,7 +25,7 @@ export interface RoomDetail {
   hostName: string
   /** 观众观看地址（可能为空，UI 需兜底"暂无"） */
   watchUrl: string
-  /** 画面方向：0=横屏  1=竖屏 */
+  /** 画面方向：1=横屏  2=竖屏 */
   videoScreenMode: number
 }
 
