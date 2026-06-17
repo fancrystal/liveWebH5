@@ -154,8 +154,7 @@ onMounted(async () => {
   try {
     log('开始鉴权 bootstrap()…')
     await roomStore.bootstrap()
-    authState.value = 'ready'
-    log('鉴权成功 → authState=ready | roomId =', roomStore.room.id || '(空)', '| token.length =', roomStore.token.length, '| userId =', roomStore.userId || '(空)')
+    log('鉴权成功 | roomId =', roomStore.room.id || '(空)', '| token.length =', roomStore.token.length, '| userId =', roomStore.userId || '(空)')
 
     // Apply the server-issued WHIP push URL so the settings panel and WebRTC
     // path use the real address instead of the localhost dev fallback. Only
@@ -167,10 +166,12 @@ onMounted(async () => {
       log('未获取到 pushStreamUrl，沿用默认 whipUrl =', streamStore.config.whipUrl)
     }
 
-    // Fill the title bar (room name / state / room number / host) from the
-    // detail API. Fire-and-forget: it falls back to test data internally and
-    // must not block entering the room.
-    roomStore.loadRoomDetail()
+    // Await room detail before showing the UI so that portrait/landscape
+    // resolution is applied on first render (no layout flicker).
+    // loadRoomDetail never throws — it falls back to test data internally.
+    await roomStore.loadRoomDetail()
+    authState.value = 'ready'
+    log('室详情加载完成 → authState=ready')
   } catch (e) {
     authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
     authState.value = 'error'
