@@ -7,6 +7,7 @@ const mediaStore = useMediaStore()
 const currentTime = ref(0)
 const duration    = ref(0)
 const isPaused    = ref(false)
+const isLooping   = ref(false)
 
 let rafId: number | null = null
 
@@ -17,6 +18,7 @@ function syncProgress() {
     currentTime.value = v.currentTime
     duration.value    = isFinite(v.duration) ? v.duration : 0
     isPaused.value    = v.paused
+    isLooping.value   = v.loop
   }
   rafId = requestAnimationFrame(syncProgress)
 }
@@ -61,6 +63,14 @@ function restart() {
   if (!(v instanceof HTMLVideoElement)) return
   v.currentTime = 0
   v.play().catch(() => {})
+}
+
+/** Toggle loop on the source video element */
+function toggleLoop() {
+  const v = mediaStore.videoInsertEl
+  if (!(v instanceof HTMLVideoElement)) return
+  v.loop = !v.loop
+  isLooping.value = v.loop
 }
 
 /** Click on the progress bar to seek */
@@ -129,6 +139,22 @@ function onProgressClick(e: MouseEvent) {
           <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
         </svg>
         重置
+      </button>
+
+      <!-- Loop toggle -->
+      <button
+        class="vib__btn vib__btn--ctrl"
+        :class="{ 'vib__btn--active': isLooping }"
+        :title="isLooping ? '取消循环' : '循环播放'"
+        @click="toggleLoop"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="17 1 21 5 17 9"/>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        循环
       </button>
 
       <!-- Mode toggle -->
@@ -262,9 +288,14 @@ function onProgressClick(e: MouseEvent) {
 
     &:hover { background: $color-bg-hover; color: $color-text-primary; }
 
-    &--ctrl { &:hover { border-color: $color-accent; color: $color-accent; } }
-    &--mode { &:hover { border-color: $color-accent; color: $color-accent; } }
-    &--stop { &:hover { border-color: $color-danger; color: $color-danger; } }
+    &--ctrl  { &:hover { border-color: $color-accent; color: $color-accent; } }
+    &--mode  { &:hover { border-color: $color-accent; color: $color-accent; } }
+    &--stop  { &:hover { border-color: $color-danger; color: $color-danger; } }
+    &--active {
+      border-color: $color-accent;
+      color: $color-accent;
+      background: rgba($color-accent, 0.12);
+    }
   }
 }
 </style>

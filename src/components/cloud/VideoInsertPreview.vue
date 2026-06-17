@@ -5,6 +5,29 @@ import { useMediaStore } from '@/stores/mediaStore'
 const mediaStore = useMediaStore()
 const containerEl = ref<HTMLElement | null>(null)
 
+// ── Play state overlay ───────────────────────────────────────────────────────
+const isPaused = ref(true)
+
+function onVideoPlay()  { isPaused.value = false }
+function onVideoPause() { isPaused.value = true  }
+
+function attachPauseListeners(el: HTMLVideoElement) {
+  el.addEventListener('play',  onVideoPlay)
+  el.addEventListener('pause', onVideoPause)
+  isPaused.value = el.paused
+}
+
+function detachPauseListeners(el: HTMLVideoElement) {
+  el.removeEventListener('play',  onVideoPlay)
+  el.removeEventListener('pause', onVideoPause)
+}
+
+function clickPlay(e: MouseEvent) {
+  e.stopPropagation()
+  const el = mediaStore.videoInsertEl as HTMLVideoElement | null
+  el?.play().catch(() => {})
+}
+
 // ── Video dimensions ─────────────────────────────────────────────────────────
 const videoW = ref(0)
 const videoH = ref(0)
@@ -75,9 +98,14 @@ function attach() {
   }
 
   // Move the shared element into the preview container (it starts hidden on body).
-  if (el.parentElement !== container) container.appendChild(el)
+  if (el.parentElement !== container) {
+    // Detach old listeners from previous element before moving
+    detachPauseListeners(el)
+    container.appendChild(el)
+  }
   applyVideoStyle(el)
   readDimensions(el)
+  attachPauseListeners(el)
 
   // Push default pip coords to the store so the mixer matches from frame 1.
   Promise.resolve().then(() => syncToStore())
@@ -91,9 +119,12 @@ watch(
   ],
   ([inserting]) => {
     if (!inserting) {
-      videoW.value = 0
-      videoH.value = 0
-      lastElUrl    = ''
+      const el = mediaStore.videoInsertEl as HTMLVideoElement | null
+      if (el) detachPauseListeners(el)
+      videoW.value  = 0
+      videoH.value  = 0
+      isPaused.value = true
+      lastElUrl     = ''
       return
     }
     attach()
@@ -216,6 +247,12 @@ function onPointerUp() {
         </template>
         <template v-else>全屏</template>
       </span>
+      <!-- Play button overlay — shown when video hasn't started yet -->
+      <button v-if="isPaused" class="vip__play-btn" @click="clickPlay">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
       <div
         v-if="mediaStore.videoInsertMode === 'pip'"
         class="vip__resize"
@@ -246,6 +283,23 @@ function onPointerUp() {
     user-select: none;
     white-space: nowrap;
     z-index: 2;
+  }
+
+  &__play-btn {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    border: none;
+    cursor: pointer;
+    z-index: 3;
+    color: #fff;
+    border-radius: inherit;
+    pointer-events: all;
+    transition: background 0.15s;
+    &:hover { background: rgba(0, 0, 0, 0.6); }
   }
 
   &__resize {

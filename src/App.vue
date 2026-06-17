@@ -308,8 +308,8 @@ provide('onOpenSettings', () => { showSettings.value = true })
            visibility never shifts the control bar horizontally. -->
       <div class="app-layout__main">
         <div class="app-layout__work">
-          <!-- Drawing toolbar — hidden in the camera-maximized scene (no canvas to draw on) -->
-          <LeftToolbar v-show="!wbStore.isContentHidden" />
+          <!-- Drawing toolbar — hidden when camera is maximized or during screen share -->
+          <LeftToolbar v-show="!wbStore.isContentHidden && wbStore.activeMode !== 'screen'" />
 
           <div class="app-layout__canvas-area" :class="{ 'app-layout__canvas-area--portrait': isPortraitMode }">
             <!-- Document panel drawer — lives in canvas-area so it always opens

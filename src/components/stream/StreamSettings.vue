@@ -219,9 +219,7 @@ const whipUrlHint = computed(() => {
 
 .settings-modal {
   width: 480px;
-  background: rgba(28, 28, 28, 0.97);   // near-opaque so canvas doesn't bleed through
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #1c1c1c;
   border: 1px solid $glass-border;
   border-radius: 12px;
   overflow: hidden;

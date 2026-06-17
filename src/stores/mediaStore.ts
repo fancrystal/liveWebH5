@@ -207,7 +207,8 @@ export const useMediaStore = defineStore('media', () => {
     // Note: blob: URLs are same-origin — crossOrigin='anonymous' is harmless for them.
     v.crossOrigin            = 'anonymous'
     v.src                    = file.downloadUrl
-    v.autoplay               = true
+    v.autoplay               = false          // user must click play manually
+    v.preload                = 'auto'         // preload so first frame is visible immediately
     v.muted                  = false          // audio is routed through useAudioPipeline
     v.playsInline            = true
     v.loop                   = false
@@ -217,7 +218,6 @@ export const useMediaStore = defineStore('media', () => {
     // display:none elements so the mixer is unaffected.
     v.style.display = 'none'
     document.body.appendChild(v)
-    v.play().catch(() => {})
 
     // Do NOT auto-stop on ended — let the video pause on the last frame.
     // The user closes it manually via the "停止插播" button.
@@ -293,15 +293,14 @@ export const useMediaStore = defineStore('media', () => {
     const v = document.createElement('video')
     // Do NOT set crossOrigin for blob: URLs — they are same-origin by definition
     v.src                    = blobUrl
-    v.autoplay               = true
+    v.autoplay               = false          // user must click play manually
+    v.preload                = 'auto'
     v.muted                  = false
     v.playsInline            = true
     v.loop                   = false
     v.disablePictureInPicture = true          // suppress Edge/Chrome native PiP overlay
-    // Off-screen (not display:none) so captureStream() produces real frames
     v.style.display = 'none'
     document.body.appendChild(v)
-    v.play().catch(() => {})
 
     // Do NOT auto-stop on ended — pause on last frame, user closes manually.
 
