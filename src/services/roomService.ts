@@ -25,6 +25,8 @@ export interface RoomDetail {
   hostName: string
   /** 观众观看地址（可能为空，UI 需兜底"暂无"） */
   watchUrl: string
+  /** 画面方向：0=横屏  1=竖屏 */
+  videoScreenMode: number
 }
 
 /** Raw envelope returned by POST /livesaas/ActivityAPI. */
@@ -38,6 +40,7 @@ interface ActivityResponse {
     roomNumber?: string
     streamerAccountNickName?: string
     operatorName?: string
+    videoScreenMode?: number
     // Watch-URL candidates — the exact field varies, probe in order
     watchUrl?: string
     liveShareUrl?: string
@@ -93,11 +96,12 @@ export async function fetchRoomDetail(
 
   const d = json.data
   const detail: RoomDetail = {
-    roomTitle:  d.roomTitle ?? '',
-    roomState:  d.roomState ?? 1,
-    roomNumber: d.roomNumber ?? '',
-    hostName:   d.streamerAccountNickName || d.operatorName || '',
-    watchUrl:   resolveWatchUrl(d),
+    roomTitle:       d.roomTitle ?? '',
+    roomState:       d.roomState ?? 1,
+    roomNumber:      d.roomNumber ?? '',
+    hostName:        d.streamerAccountNickName || d.operatorName || '',
+    watchUrl:        resolveWatchUrl(d),
+    videoScreenMode: d.videoScreenMode ?? 0,
   }
   log('解析 →', detail)
   return detail

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { RoomInfo } from '@/types/room'
 import { exchangeCodeForToken } from '@/services/authService'
 import { fetchRoomDetail } from '@/services/roomService'
+import { useStreamStore } from '@/stores/streamStore'
 import { getCookie, setCookie, deleteCookie } from '@/utils/cookie'
 
 /** Cookie key holding the session token (persists across page refresh). */
@@ -214,7 +215,11 @@ export const useRoomStore = defineStore('room', () => {
         roomState:  d.roomState,
         watchUrl:   d.watchUrl,
       })
-      log('loadRoomDetail: 成功 →', d.roomTitle, '| state =', d.roomState, '| roomNumber =', d.roomNumber)
+      // videoScreenMode: 0=横屏  1=竖屏 — 自动选对应的默认分辨率
+      const streamStore = useStreamStore()
+      const isPortrait = d.videoScreenMode === 1
+      streamStore.updateConfig({ resolution: isPortrait ? '720x1280' : '1280x720' })
+      log('loadRoomDetail: 成功 →', d.roomTitle, '| state =', d.roomState, '| screenMode =', d.videoScreenMode)
     } catch (err) {
       log('loadRoomDetail: 失败，使用测试数据填充 |', err instanceof Error ? err.message : err)
       updateRoom({ ...FALLBACK_ROOM_DETAIL })
