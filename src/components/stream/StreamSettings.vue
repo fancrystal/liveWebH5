@@ -193,6 +193,18 @@ const whipUrlHint = computed(() => {
               </select>
             </div>
           </div>
+
+          <!-- Camera mirror -->
+          <div class="form-field form-field--row">
+            <label>摄像头镜像</label>
+            <button
+              class="mirror-toggle"
+              :class="{ 'mirror-toggle--on': mediaStore.isCameraMirrored }"
+              @click="mediaStore.toggleCameraMirror()"
+            >
+              <span class="mirror-toggle__knob" />
+            </button>
+          </div>
         </div>
 
         <div class="settings-modal__footer">
@@ -323,6 +335,40 @@ const whipUrlHint = computed(() => {
   label {
     font-size: 12px;
     color: $color-text-secondary;
+  }
+
+  &--row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.mirror-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  background: $color-border;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+
+  &--on { background: $color-accent; }
+
+  &__knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+
+    .mirror-toggle--on & { transform: translateX(16px); }
   }
 }
 

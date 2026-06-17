@@ -178,6 +178,7 @@ function onWheel(e: WheelEvent) {
       playsinline
       disablepictureinpicture
       class="camera-pip__video"
+      :style="mediaStore.isCameraMirrored ? { transform: 'scaleX(-1)' } : { transform: 'none' }"
     />
     <!-- Resize handle — bottom-right corner -->
     <div
@@ -207,7 +208,6 @@ function onWheel(e: WheelEvent) {
     height: 100%;
     object-fit: cover;
     display: block;
-    transform: scaleX(-1);
 
     // Suppress Edge/Chrome built-in video overlay (PiP button, play overlay, etc.)
     &::-webkit-media-controls             { display: none !important; }

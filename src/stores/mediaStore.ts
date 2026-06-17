@@ -161,6 +161,12 @@ export const useMediaStore = defineStore('media', () => {
     isCameraVisible.value = !isCameraVisible.value
   }
 
+  /** Whether the camera preview (and stream output) is horizontally mirrored. */
+  const isCameraMirrored = ref(true)
+  function toggleCameraMirror() {
+    isCameraMirrored.value = !isCameraMirrored.value
+  }
+
   // ── Video insert (cloud drive playback) ────────────────────────────────────
   /** The <video> element currently playing the inserted video. */
   const videoInsertEl   = ref<HTMLVideoElement | null>(null)
@@ -322,6 +328,7 @@ export const useMediaStore = defineStore('media', () => {
     cameraPip, updateCameraPip, isCameraMaximized, maximizeCamera, restoreCamera,
     loadDevices, toggleCamera, toggleMic, switchCamera, switchMic,
     startScreenShare, stopScreenShare, toggleCameraVisibility,
+    isCameraMirrored, toggleCameraMirror,
     // video insert
     videoInsertEl, videoInsertMode, videoInsertFile, isVideoInserting,
     startVideoInsert, startLocalFileInsert, stopVideoInsert, switchVideoInsertMode,

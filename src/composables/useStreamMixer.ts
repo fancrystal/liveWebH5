@@ -340,10 +340,14 @@ export function useStreamMixer() {
           ctx.beginPath()
           ctx.roundRect(px, py, pw, ph, radius)
           ctx.clip()
-          // Draw horizontally flipped (mirrors the CSS scaleX(-1) on the <video>)
-          ctx.translate(px + pw, py)
-          ctx.scale(-1, 1)
-          ctx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, pw, ph)
+          // Honour the mirror toggle — matches CSS scaleX(-1) on the preview <video>
+          if (mediaStore.isCameraMirrored) {
+            ctx.translate(px + pw, py)
+            ctx.scale(-1, 1)
+            ctx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, pw, ph)
+          } else {
+            ctx.drawImage(camVideo, sx, sy, sw, sh, px, py, pw, ph)
+          }
           ctx.restore()
 
           // Border — matches CSS border: 2px solid rgba(255,255,255,0.12)
