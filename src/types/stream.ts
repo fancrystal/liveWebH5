@@ -14,7 +14,7 @@ export interface StreamConfig {
   mode: StreamMode
   rtmpUrl: string
   whipUrl: string
-  resolution: '1280x720' | '1920x1080' | '854x480'
+  resolution: '1280x720' | '1920x1080' | '854x480' | '720x1280' | '1080x1920' | '480x854'
   frameRate: 15 | 24 | 30
   videoBitrate: number  // kbps
   audioBitrate: 64 | 128 | 192
