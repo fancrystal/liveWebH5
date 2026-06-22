@@ -41,6 +41,7 @@ export const useWhiteboardStore = defineStore('whiteboard', () => {
   function removePage(id: string) {
     if (pages.value.length === 1) return
     const idx = pages.value.findIndex(p => p.id === id)
+    if (idx === -1) return
     pages.value.splice(idx, 1)
     if (activePageId.value === id) {
       activePageId.value = pages.value[Math.max(0, idx - 1)]!.id
@@ -84,7 +85,9 @@ export const useWhiteboardStore = defineStore('whiteboard', () => {
     _preScrContentHidden = isContentHidden.value
     _preScrMode = activeMode.value === 'document' ? 'document' : 'whiteboard'
     activeMode.value = 'screen'
-    isContentHidden.value = false          // reveal whiteboard overlay during share
+    isContentHidden.value = false
+    // Drawing tools make no sense on the screen-share overlay — force select
+    if (activeTool.value !== 'select') activeTool.value = 'select'
   }
 
   function exitScreenMode() {

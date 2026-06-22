@@ -143,7 +143,13 @@ export const useMediaStore = defineStore('media', () => {
   }
 
   async function startScreenShare() {
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+      // Exclude the current tab from the picker so the "sharing this tab" banner
+      // never appears inside the captured content. Users pick a window or monitor.
+      selfBrowserSurface: 'exclude',
+    } as DisplayMediaStreamOptions)
     screenStream.value = stream
     isScreenSharing.value = true
     stream.getVideoTracks()[0].onended = () => {

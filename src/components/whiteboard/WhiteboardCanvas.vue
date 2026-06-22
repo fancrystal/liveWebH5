@@ -53,17 +53,42 @@ watch(activeDocId, () => {
   clearCanvas()
 })
 
-// When entering document mode: apply current scroll and reset annotation history
-// so that undo only covers strokes drawn on the document, not prior whiteboard ops.
-// When leaving document mode: reset viewport transform so whiteboard mode is unaffected.
-watch(() => wbStore.activeMode, (mode) => {
+// When entering document mode: save whiteboard content, clear the canvas so
+// whiteboard strokes don't bleed into document annotations, then reset history.
+// When leaving document mode: clear annotations and restore the whiteboard page.
+watch(() => wbStore.activeMode, (mode, prevMode) => {
   if (!fc.value) return
   if (mode === 'document') {
+    // Snapshot whiteboard content BEFORE clearing the canvas.
+    // resetPageHistory() internally calls saveSnapshot() → onLocalChange() which
+    // overwrites page.fabricJson with the now-empty canvas, so we must re-apply
+    // the snapshot after resetPageHistory() finishes.
+    const whiteboardSnapshot = fc.value.toJSON()
+    fc.value.clear()
+    fc.value.backgroundColor = ''
+    fc.value.renderAll()
     applyDocScroll(docScrollTop.value)
     resetPageHistory()
-  } else {
+    // Re-apply: ensure fabricJson holds whiteboard content, not the empty canvas
+    // that saveSnapshot() just wrote.
+    const page = wbStore.pages.find(p => p.id === wbStore.activePageId)
+    if (page) page.fabricJson = whiteboardSnapshot
+  } else if (prevMode === 'document') {
+    // Restore the whiteboard page that was active before document mode.
+    // Clear first so document annotations don't briefly flash on a white background
+    // while loadFromJSON is pending.
     fc.value.setViewportTransform([1, 0, 0, 1, 0, 0])
+    fc.value.clear()
+    fc.value.backgroundColor = '#ffffff'
     fc.value.renderAll()
+    const page = wbStore.pages.find(p => p.id === wbStore.activePageId)
+    if (page?.fabricJson) {
+      fc.value.loadFromJSON(page.fabricJson).then(() => {
+        if (!fc.value) return  // guard: component may have unmounted during async load
+        fc.value.backgroundColor = '#ffffff'
+        fc.value.renderAll()
+      })
+    }
   }
 })
 

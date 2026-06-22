@@ -70,7 +70,12 @@ const showStopShareConfirm = ref(false)
 async function handleScreenShare() {
   try {
     if (mediaStore.isScreenSharing) {
-      showStopShareConfirm.value = true   // confirm before stopping — prevents mis-click
+      if (wbStore.activeMode !== 'screen') {
+        // Already sharing but switched away — go back to screen view
+        wbStore.enterScreenMode()
+      } else {
+        showStopShareConfirm.value = true  // confirm before stopping — prevents mis-click
+      }
     } else {
       wbStore.enterScreenMode()   // saves isContentHidden before share starts
       await mediaStore.startScreenShare()
