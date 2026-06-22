@@ -150,11 +150,11 @@ export function useWhiteboard(
         //    so it covers the full visual area of the eraser brush without extra padding.
         // 2. Path-intersection fallback for cases AABB misses (contained objects, etc.)
         const eraserPath = e.path as fabric.Path
-        const er = eraserPath.getBoundingRect(true)
+        const er = eraserPath.getBoundingRect()
 
         const toRemove = canvas.getObjects().filter(obj => {
           if (obj === eraserPath) return false
-          const ob = obj.getBoundingRect(true)
+          const ob = obj.getBoundingRect()
           const aabbHit =
             er.left < ob.left + ob.width &&
             er.left + er.width > ob.left &&
