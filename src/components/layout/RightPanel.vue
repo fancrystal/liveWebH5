@@ -3,8 +3,8 @@ import { ref, nextTick, watch, onMounted, inject, computed } from 'vue'
 import { useChatStore } from '@/stores/chatStore'
 import { useCoStreamStore } from '@/stores/coStreamStore'
 import { useI18n } from '@/i18n'
-import type { ChatMessage } from '@/types/chat'
 import type { useCoStream } from '@/composables/useCoStream'
+import type { TencentIMInstance } from '@/composables/useTencentIM'
 
 /** Cap the number of chat messages rendered in the DOM */
 const MAX_VISIBLE_MESSAGES = 100
@@ -12,6 +12,7 @@ const MAX_VISIBLE_MESSAGES = 100
 const chatStore     = useChatStore()
 const coStreamStore = useCoStreamStore()
 const coStream      = inject<ReturnType<typeof useCoStream>>('coStream')
+const imChat        = inject<TencentIMInstance>('imChat')
 const { t }         = useI18n()
 
 /** Only render the last N messages to avoid large DOM trees */
@@ -42,23 +43,25 @@ watch(() => activeTab.value, (tab) => {
   }
 })
 
-function sendMessage() {
+const isSending = ref(false)
+
+async function sendMessage() {
   const text = inputText.value.trim()
-  if (!text) return
-  const msg: ChatMessage = {
-    id: `local-${Date.now()}`,
-    roomId: 'room-1',
-    senderId: 'host',
-    senderNickname: '主播',
-    senderAvatar: '',
-    content: text,
-    type: 'text',
-    timestamp: Date.now(),
-    isPinned: false,
-    isPrivate: false,
-  }
-  chatStore.addMessage(msg)
+  if (!text || isSending.value) return
   inputText.value = ''
+
+  if (imChat && imChat.status.value === 'ready') {
+    isSending.value = true
+    try {
+      await imChat.sendMessage(text)
+    } catch (e) {
+      console.error('[RightPanel] 发送失败:', e)
+      // Restore input text on failure
+      inputText.value = text
+    } finally {
+      isSending.value = false
+    }
+  }
 }
 
 function toggleCoStream() {
@@ -178,14 +181,10 @@ function toggleHighlight(id: string) {
               :class="{ active: chatStore.filter === 'all' }"
               @click="chatStore.setFilter('all'); chatStore.clearUnread()"
             >{{ t('publicChat') }}</button>
-            <!-- 私聊互动：本版本不上线，恢复时取消注释即可
-            <button
-              class="panel-header__tab"
-              :class="{ active: chatStore.filter === 'private' }"
-              @click="chatStore.setFilter('private')"
-            >{{ t('privateChat') }}</button>
-            -->
-
+          </div>
+          <!-- IM connection status dot -->
+          <div v-if="imChat" class="im-status" :class="`im-status--${imChat.status.value}`" :title="imChat.statusText.value">
+            <span class="im-status__dot" />
           </div>
         </div>
 
@@ -221,22 +220,27 @@ function toggleHighlight(id: string) {
           >
             {{ t('onlyNewest')(MAX_VISIBLE_MESSAGES, chatStore.filteredMessages.length) }}
           </div>
-          <div
-            v-for="msg in visibleMessages"
-            :key="msg.id"
-            class="chat-msg"
-          >
-            <div class="chat-msg__avatar" :style="{ background: msg.senderId === 'host' ? '#ef4444' : '#3b82f6' }">
-              {{ msg.senderNickname[0] }}
+          <template v-for="msg in visibleMessages" :key="msg.id">
+            <!-- System tip message -->
+            <div v-if="msg.type === 'system'" class="chat-system-tip">{{ msg.content }}</div>
+            <!-- Normal message -->
+            <div v-else class="chat-msg">
+              <div
+                class="chat-msg__avatar"
+                :style="{ background: msg.senderId === 'self' ? '#10b981' : msg.senderId === 'host' ? '#ef4444' : '#3b82f6' }"
+              >
+                {{ msg.senderNickname[0] }}
+              </div>
+              <div class="chat-msg__body">
+                <span class="chat-msg__name">
+                  {{ msg.senderNickname }}
+                  <span v-if="msg.senderId === 'self'" class="chat-msg__self-tag">我</span>
+                  <span v-else-if="msg.senderId === 'host'" class="chat-msg__host-tag">{{ t('live') }}</span>
+                </span>
+                <p class="chat-msg__text">{{ msg.content }}</p>
+              </div>
             </div>
-            <div class="chat-msg__body">
-              <span class="chat-msg__name">
-                {{ msg.senderNickname }}
-                <span v-if="msg.senderId === 'host'" class="chat-msg__host-tag">{{ t('live') }}</span>
-              </span>
-              <p class="chat-msg__text">{{ msg.content }}</p>
-            </div>
-          </div>
+          </template>
         </div>
 
         <!-- Pinned message -->
@@ -250,11 +254,16 @@ function toggleHighlight(id: string) {
           <input
             v-model="inputText"
             class="chat-input__field"
-            :placeholder="t('sayHello')"
+            :placeholder="imChat && imChat.status.value !== 'ready' ? (imChat.statusText.value || t('sayHello')) : t('sayHello')"
+            :disabled="isSending || (imChat && imChat.status.value === 'connecting')"
             maxlength="200"
             @keyup.enter="sendMessage"
           />
-          <button class="chat-input__send" @click="sendMessage">{{ t('send') }}</button>
+          <button
+            class="chat-input__send"
+            :disabled="isSending || (imChat && imChat.status.value === 'connecting')"
+            @click="sendMessage"
+          >{{ isSending ? '…' : t('send') }}</button>
         </div>
       </template>
 
@@ -678,12 +687,60 @@ function toggleHighlight(id: string) {
     font-weight: 500;
   }
 
+  &__self-tag {
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(#10b981, 0.2);
+    color: #10b981;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
   &__text {
     font-size: 13px;
     color: $color-text-primary;
     margin: 0;
     word-break: break-word;
   }
+}
+
+// System tip (join/leave/clear-screen)
+.chat-system-tip {
+  text-align: center;
+  font-size: 11px;
+  color: $color-text-muted;
+  padding: 2px 8px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+// IM connection status dot in header
+.im-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-right: 2px;
+
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: $color-text-muted;
+    transition: background 0.3s;
+  }
+
+  &--ready &__dot    { background: #22c55e; }
+  &--connecting &__dot { background: #f59e0b; animation: im-pulse 1s infinite; }
+  &--error &__dot    { background: #ef4444; }
+  &--disconnected &__dot { background: #f59e0b; animation: im-pulse 1s infinite; }
+  &--idle &__dot     { background: $color-text-muted; }
+}
+
+@keyframes im-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
 }
 
 .chat-pinned {

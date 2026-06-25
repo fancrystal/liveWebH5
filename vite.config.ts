@@ -22,6 +22,15 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // Dev: proxy IM REST API to bypass browser CORS on port 9085.
+      // TencentIMService derives the URL from sassUrl at runtime, so this
+      // proxy is only active in local dev — prod goes through nginx.
+      '/im-api': {
+        target: 'https://qdd-test.lxi-tech.com:9085',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/im-api/, ''),
+      },
     },
   },
   css: {

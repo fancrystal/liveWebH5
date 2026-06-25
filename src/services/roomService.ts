@@ -27,6 +27,8 @@ export interface RoomDetail {
   watchUrl: string
   /** 画面方向：1=横屏  2=竖屏 */
   videoScreenMode: number
+  /** 腾讯IM 群组ID */
+  groupId: string
 }
 
 /** Raw envelope returned by POST /livesaas/ActivityAPI. */
@@ -41,6 +43,7 @@ interface ActivityResponse {
     streamerAccountNickName?: string
     operatorName?: string
     videoScreenMode?: number
+    groupId?: string
     // Watch-URL candidates — the exact field varies, probe in order
     watchUrl?: string
     liveShareUrl?: string
@@ -102,6 +105,7 @@ export async function fetchRoomDetail(
     hostName:        d.streamerAccountNickName || d.operatorName || '',
     watchUrl:        resolveWatchUrl(d),
     videoScreenMode: d.videoScreenMode ?? 0,
+    groupId:         d.groupId ?? '',
   }
   log('解析 →', detail)
   return detail

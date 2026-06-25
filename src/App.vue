@@ -29,6 +29,7 @@ import { useCoStream } from '@/composables/useCoStream'
 import { useNetworkMonitor } from '@/composables/useNetworkMonitor'
 import { useToast } from '@/composables/useToast'
 import { useAudioPipeline } from '@/composables/useAudioPipeline'
+import { useTencentIM } from '@/composables/useTencentIM'
 import { isSafari, supportsRTMP } from '@/utils/browser'
 import { signalService } from '@/services/SignalService'
 import { useRoomStore } from '@/stores/roomStore'
@@ -80,10 +81,12 @@ function reloadPage() {
   window.location.reload()
 }
 
-const coStream = useCoStream()
+const coStream  = useCoStream()
+const imChat    = useTencentIM()
 
-// Provide coStream controls to RightPanel
+// Provide coStream controls and IM chat to RightPanel
 provide('coStream', coStream)
+provide('imChat', imChat)
 
 // ── Canvas aspect ratio from stream resolution ────────────────────────────────
 // When the user picks a portrait resolution (e.g. 720x1280), constrain the
@@ -172,6 +175,20 @@ onMounted(async () => {
     await roomStore.loadRoomDetail()
     authState.value = 'ready'
     log('室详情加载完成 → authState=ready')
+
+    // Init Tencent IM chat (non-blocking — failure won't break the stream).
+    // Access store properties directly (not destructured) to avoid any ref-unwrap ambiguity.
+    const imBaseUrl = roomStore.imBaseUrl
+    const groupId   = roomStore.room.groupId
+    const token     = roomStore.token
+    if (groupId && imBaseUrl) {
+      log('初始化腾讯IM | groupId =', groupId, '| imBaseUrl =', imBaseUrl)
+      imChat.init(imBaseUrl, token, groupId).catch((e) =>
+        log('IM 初始化失败（非致命）|', e)
+      )
+    } else {
+      log('跳过 IM 初始化 | groupId =', groupId || '(空)', '| imBaseUrl =', imBaseUrl || '(空)')
+    }
   } catch (e) {
     authErrorMsg.value = e instanceof Error ? e.message : '登录失败，请刷新页面重试'
     authState.value = 'error'

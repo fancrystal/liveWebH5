@@ -14,8 +14,14 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   function addMessage(msg: ChatMessage) {
-    messages.value.push(msg)
-    unreadCount.value++
+    messages.value = [...messages.value, msg]
+    // Don't count own echoed messages as unread
+    if (msg.senderId !== 'self') unreadCount.value++
+  }
+
+  /** Prepend history messages (oldest first) without incrementing unread. */
+  function prependMessages(msgs: ChatMessage[]) {
+    messages.value = [...msgs, ...messages.value]
   }
 
   function pinMessage(id: string) {
@@ -31,6 +37,11 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = messages.value.filter(m => m.id !== id)
   }
 
+  function clearMessages() {
+    messages.value = []
+    pinnedMessage.value = null
+  }
+
   function setFilter(f: ChatFilter) {
     filter.value = f
   }
@@ -41,6 +52,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     messages, pinnedMessage, filter, unreadCount, filteredMessages,
-    addMessage, pinMessage, unpinMessage, deleteMessage, setFilter, clearUnread,
+    addMessage, prependMessages, pinMessage, unpinMessage,
+    deleteMessage, clearMessages, setFilter, clearUnread,
   }
 })

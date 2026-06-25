@@ -11,4 +11,6 @@ export interface RoomInfo {
   hostName: string
   /** 服务端直播状态：1=预告 2=直播中 3=已结束 */
   roomState: number
+  /** 腾讯IM 群组ID，用于聊天功能 */
+  groupId: string
 }

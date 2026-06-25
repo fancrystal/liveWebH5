@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { RoomInfo } from '@/types/room'
 import { exchangeCodeForToken } from '@/services/authService'
 import { fetchRoomDetail } from '@/services/roomService'
@@ -38,6 +38,7 @@ export const useRoomStore = defineStore('room', () => {
     roomNumber: '',
     hostName: '',
     roomState: 1,
+    groupId: '',
   })
 
   /** SaaS API base URL, e.g. https://mall-test.lxi-tech.com:15816 */
@@ -50,6 +51,18 @@ export const useRoomStore = defineStore('room', () => {
   const username = ref('')
   /** WHIP push URL issued by the server for this room (from exchange response). */
   const pushStreamUrl = ref('')
+
+  /** IM REST API base URL — same host as sassUrl but on port 9085. */
+  const imBaseUrl = computed(() => {
+    if (!sassUrl.value) return ''
+    try {
+      const url = new URL(sassUrl.value)
+      url.port = '9085'
+      return url.origin
+    } catch {
+      return ''
+    }
+  })
 
   /**
    * Resolve the SaaS API base URL.
@@ -214,6 +227,7 @@ export const useRoomStore = defineStore('room', () => {
         hostName:   d.hostName,
         roomState:  d.roomState,
         watchUrl:   d.watchUrl,
+        groupId:    d.groupId,
       })
       // videoScreenMode: 1=横屏  2=竖屏 — 自动选对应的默认分辨率
       const streamStore = useStreamStore()
@@ -247,6 +261,7 @@ export const useRoomStore = defineStore('room', () => {
     userId,
     username,
     pushStreamUrl,
+    imBaseUrl,
     updateRoom,
     bootstrap,
     loadRoomDetail,

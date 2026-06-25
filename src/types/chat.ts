@@ -1,4 +1,4 @@
-export type MessageType = 'text' | 'image' | 'emoji'
+export type MessageType = 'text' | 'image' | 'emoji' | 'system'
 
 export interface ChatMessage {
   id: string
