@@ -70,7 +70,6 @@ export function useTencentIM() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function parseIMMessage(msg: any): ChatMessage | null {
     const TYPES = imService.TYPES
-    const msgType = msg.type as string
     const senderId = (msg.from ?? '') as string
 
     if (msg.type === TYPES.MSG_GRP_TIP) {
@@ -119,7 +118,7 @@ export function useTencentIM() {
       }
     }
 
-    console.log(TAG, `parseIMMessage() 忽略不支持的消息类型 | type = ${msgType} | from = ${senderId}`)
+    console.log(TAG, `parseIMMessage() 忽略不支持的消息类型 | type = ${msg.type as string} | from = ${senderId}`)
     return null
   }
 
@@ -139,6 +138,10 @@ export function useTencentIM() {
     console.log(TAG, 'SDK_READY 事件 — IM 已就绪，可以收发消息')
     status.value = 'ready'
     statusText.value = '已连接直播群'
+    // Load history here — SDK_READY is the only correct moment to call getMessageList.
+    // login() resolving does NOT mean the SDK is ready; calling getMessageList before
+    // SDK_READY causes it to return empty results silently.
+    loadHistory().catch((e) => console.error(TAG, '历史消息拉取失败 |', e))
   }
 
   function onSDKNotReady() {
@@ -162,8 +165,11 @@ export function useTencentIM() {
   async function init(imBaseUrl: string, token: string, groupId: string): Promise<void> {
     console.log(TAG, `init() 开始 | groupId = ${groupId} | imBaseUrl = ${imBaseUrl} | token.length = ${token.length}`)
 
-    if (!groupId) {
-      console.warn(TAG, 'init() 跳过 — groupId 为空（直播间可能未绑定IM群）')
+    // groupId 为空或包含占位符（如 "——"）时跳过
+    if (!groupId || /^[-—\s]+$/.test(groupId)) {
+      console.warn(TAG, `init() 跳过 — groupId 无效 "${groupId}"（直播间未绑定IM群）`)
+      status.value = 'idle'
+      statusText.value = ''
       return
     }
     if (!imBaseUrl) {
@@ -191,10 +197,7 @@ export function useTencentIM() {
 
       console.log(TAG, `④ 登录 IM | userId = ${userId}...`)
       await imService.login(userId, userSig)
-      console.log(TAG, '④ login() 调用完成，等待 SDK_READY 事件...')
-
-      console.log(TAG, '⑤ 后台拉取历史消息...')
-      loadHistory().catch((e) => console.error(TAG, '历史消息拉取失败 |', e))
+      console.log(TAG, '④ login() 调用完成，等待 SDK_READY 事件后自动拉取历史消息...')
     } catch (e) {
       status.value = 'error'
       statusText.value = '聊天连接失败'

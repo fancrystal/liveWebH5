@@ -52,12 +52,19 @@ export const useRoomStore = defineStore('room', () => {
   /** WHIP push URL issued by the server for this room (from exchange response). */
   const pushStreamUrl = ref('')
 
-  /** IM REST API base URL — same host as sassUrl but on port 9085. */
+  /**
+   * IM REST API base URL.
+   * Priority: VITE_BASE_URL_9085 env var > derive from sassUrl (replace port with 15830).
+   * The env var name follows the existing project convention; the value is the actual
+   * gateway URL for the IM service (which may differ from port 9085 in some environments).
+   */
   const imBaseUrl = computed(() => {
+    const envUrl = import.meta.env.VITE_BASE_URL_9085 as string | undefined
+    if (envUrl) return envUrl
     if (!sassUrl.value) return ''
     try {
       const url = new URL(sassUrl.value)
-      url.port = '9085'
+      url.port = '15830'
       return url.origin
     } catch {
       return ''

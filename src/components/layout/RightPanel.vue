@@ -48,19 +48,19 @@ const isSending = ref(false)
 async function sendMessage() {
   const text = inputText.value.trim()
   if (!text || isSending.value) return
-  inputText.value = ''
 
-  if (imChat && imChat.status.value === 'ready') {
-    isSending.value = true
-    try {
-      await imChat.sendMessage(text)
-    } catch (e) {
-      console.error('[RightPanel] 发送失败:', e)
-      // Restore input text on failure
-      inputText.value = text
-    } finally {
-      isSending.value = false
-    }
+  // Guard before clearing — if IM is not ready, keep the text in the input.
+  if (!imChat || imChat.status.value !== 'ready') return
+
+  inputText.value = ''
+  isSending.value = true
+  try {
+    await imChat.sendMessage(text)
+  } catch (e) {
+    console.error('[RightPanel] 发送失败:', e)
+    inputText.value = text
+  } finally {
+    isSending.value = false
   }
 }
 
@@ -255,13 +255,13 @@ function toggleHighlight(id: string) {
             v-model="inputText"
             class="chat-input__field"
             :placeholder="imChat && imChat.status.value !== 'ready' ? (imChat.statusText.value || t('sayHello')) : t('sayHello')"
-            :disabled="isSending || (imChat && imChat.status.value === 'connecting')"
+            :disabled="isSending || !imChat || imChat.status.value !== 'ready'"
             maxlength="200"
             @keyup.enter="sendMessage"
           />
           <button
             class="chat-input__send"
-            :disabled="isSending || (imChat && imChat.status.value === 'connecting')"
+            :disabled="isSending || !imChat || imChat.status.value !== 'ready'"
             @click="sendMessage"
           >{{ isSending ? '…' : t('send') }}</button>
         </div>
@@ -337,7 +337,7 @@ function toggleHighlight(id: string) {
                 <span class="product-card__price">¥{{ p.price }}</span>
                 <span v-if="p.originalPrice" class="product-card__original">¥{{ p.originalPrice }}</span>
               </div>
-              <a v-if="p.link" :href="p.link" target="_blank" class="product-card__link">查看链接</a>
+              <a v-if="p.link && /^https?:\/\//i.test(p.link)" :href="p.link" target="_blank" rel="noopener noreferrer" class="product-card__link">查看链接</a>
             </div>
             <!-- Actions -->
             <div class="product-card__actions">

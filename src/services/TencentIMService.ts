@@ -1,6 +1,9 @@
 import TencentCloudChat from '@tencentcloud/chat'
 
-const IM_SDK_APP_ID = Number(import.meta.env.VITE_IM_SDK_APP_ID ?? 1600113763)
+const IM_SDK_APP_ID = Number(import.meta.env.VITE_IM_SDK_APP_ID)
+if (!IM_SDK_APP_ID) {
+  throw new Error('[TencentIMService] VITE_IM_SDK_APP_ID 未配置，请在 .env 文件中设置腾讯云 SDKAppID')
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => void
