@@ -6,8 +6,7 @@
  * shown in the top bar: title, state, room number and host nickname.
  */
 
-/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
-const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+import { VERBOSE_LOG } from '@/config/env'
 
 /** Prefixed console logger; only emits when VERBOSE_LOG is on. */
 function log(...args: unknown[]): void {

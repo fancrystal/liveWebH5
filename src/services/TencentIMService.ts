@@ -1,6 +1,5 @@
 import TencentCloudChat from '@tencentcloud/chat'
-
-const IM_SDK_APP_ID = Number(import.meta.env.VITE_IM_SDK_APP_ID ?? 1600113763)
+import { IM_SDK_APP_ID } from '@/config/env'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => void

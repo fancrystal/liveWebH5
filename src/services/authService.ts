@@ -11,8 +11,7 @@
  * most once per entry; on refresh the cached cookie token is reused instead.
  */
 
-/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
-const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
+import { VERBOSE_LOG } from '@/config/env'
 
 /** Prefixed console logger; only emits when VERBOSE_LOG is on. */
 function log(...args: unknown[]): void {

@@ -5,16 +5,14 @@ import { exchangeCodeForToken } from '@/services/authService'
 import { fetchRoomDetail } from '@/services/roomService'
 import { useStreamStore } from '@/stores/streamStore'
 import { getCookie, setCookie, deleteCookie } from '@/utils/cookie'
+import { SASS_URL, DEV_SASS_URL, DEV_TOKEN, DEV_USER_ID, DEV_ROOM_ID, IM_BASE_URL, VERBOSE_LOG, IS_DEV } from '@/config/env'
 
 /** Cookie key holding the session token (persists across page refresh). */
 const TOKEN_COOKIE = 'lh_token'
 /** Cookie key holding the WHIP push URL (so a refresh keeps the real address). */
 const PUSH_URL_COOKIE = 'lh_push'
 
-/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
-const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
-
-/** Prefixed console logger; only emits when VERBOSE_LOG is on. */
+/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG via env module. */
 function log(...args: unknown[]): void {
   if (VERBOSE_LOG) console.log('[roomStore]', ...args)
 }
@@ -41,7 +39,7 @@ export const useRoomStore = defineStore('room', () => {
     groupId: '',
   })
 
-  /** SaaS API base URL, e.g. https://mall-test.lxi-tech.com:15816 */
+  /** SaaS API base URL, e.g. https://host:15816 */
   const sassUrl = ref('')
   /** Bearer token used for all business API calls (exchanged from one-time code). */
   const token = ref('')
@@ -53,23 +51,10 @@ export const useRoomStore = defineStore('room', () => {
   const pushStreamUrl = ref('')
 
   /**
-   * IM REST API base URL.
-   * Priority: VITE_BASE_URL_9085 env var > derive from sassUrl (replace port with 15830).
-   * The env var name follows the existing project convention; the value is the actual
-   * gateway URL for the IM service (which may differ from port 9085 in some environments).
+   * IM REST API base URL, from VITE_IM_BASE_URL (preferred) or VITE_BASE_URL_9085 (legacy).
+   * No hardcoded port fallback — must be configured in env for each environment.
    */
-  const imBaseUrl = computed(() => {
-    const envUrl = import.meta.env.VITE_BASE_URL_9085 as string | undefined
-    if (envUrl) return envUrl
-    if (!sassUrl.value) return ''
-    try {
-      const url = new URL(sassUrl.value)
-      url.port = '15830'
-      return url.origin
-    } catch {
-      return ''
-    }
-  })
+  const imBaseUrl = computed(() => IM_BASE_URL)
 
   /**
    * Resolve the SaaS API base URL.
@@ -77,11 +62,7 @@ export const useRoomStore = defineStore('room', () => {
    * Both the exchange endpoint and business endpoints live under this base.
    */
   function resolveSassUrl(params: URLSearchParams): string {
-    return (
-      params.get('sassUrl') ||
-      (import.meta.env.VITE_SASS_URL ?? '') ||
-      (import.meta.env.DEV ? (import.meta.env.VITE_DEV_SASS_URL ?? '') : '')
-    )
+    return params.get('sassUrl') || SASS_URL || (IS_DEV ? DEV_SASS_URL : '')
   }
 
   /**
@@ -107,7 +88,6 @@ export const useRoomStore = defineStore('room', () => {
    */
   async function bootstrap(): Promise<void> {
     const params = new URLSearchParams(window.location.search)
-    const isDev = import.meta.env.DEV
 
     sassUrl.value = resolveSassUrl(params)
 
@@ -116,7 +96,7 @@ export const useRoomStore = defineStore('room', () => {
     const code = params.get('code') || ''
     const roomName = params.get('roomName') || ''
 
-    log('bootstrap 开始 | isDev =', isDev)
+    log('bootstrap 开始 | isDev =', IS_DEV)
     log('原始 URL =', window.location.href)
     log('解析参数 → sassUrl =', sassUrl.value, '| roomInfoId =', roomInfoId, '| code =', code ? `${code.slice(0, 8)}…` : '(无)')
 
@@ -186,12 +166,12 @@ export const useRoomStore = defineStore('room', () => {
     }
 
     // 3. Dev fallback: read directly from env vars (no portal redirect).
-    if (isDev) {
+    if (IS_DEV) {
       log('分支③: 开发兜底，从 VITE_DEV_* 读取 token/userId')
-      token.value = import.meta.env.VITE_DEV_TOKEN ?? ''
-      userId.value = import.meta.env.VITE_DEV_USER_ID ?? ''
+      token.value = DEV_TOKEN
+      userId.value = DEV_USER_ID
       if (!room.value.id) {
-        const devRoom = import.meta.env.VITE_DEV_ROOM_ID ?? ''
+        const devRoom = DEV_ROOM_ID
         if (devRoom) room.value = { ...room.value, id: devRoom }
       }
       log('分支③: dev token.length =', token.value.length, '| userId =', userId.value || '(空)')

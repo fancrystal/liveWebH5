@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { StreamState, StreamConfig, LiveStatus } from '@/types/stream'
+import { WHIP_URL } from '@/config/env'
 
 const DEFAULT_CONFIG: StreamConfig = {
   mode: 'webrtc',
   rtmpUrl: '',
-  whipUrl: import.meta.env.VITE_WHIP_URL ?? 'http://localhost:1985/rtc/v1/whip/?app=live&stream=test',
+  whipUrl: WHIP_URL || 'http://localhost:1985/rtc/v1/whip/?app=live&stream=test',
   resolution: '1280x720',
   frameRate: 30,
   videoBitrate: 2000,

@@ -1,6 +1,10 @@
 node_modules/
 dist/
 .claude/
+.agents/
 *.local
 .env
 .env.*.local
+
+# 临时笔记 / scratch notes
+1.txt

@@ -6,9 +6,9 @@ import type { StreamConfig } from '@/types/stream'
 
 // This release ships WHIP-only (no RTMP), so there is no mode selector.
 // The push URL is server-issued. Editing it is a test-environment debugging
-// affordance — production shows the field read-only (greyed out):
-// set VITE_PUSH_URL_EDITABLE=false for real production.
-const pushUrlEditable = import.meta.env.VITE_PUSH_URL_EDITABLE === 'true'
+import { PUSH_URL_EDITABLE } from '@/config/env'
+
+const pushUrlEditable = PUSH_URL_EDITABLE
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [v: boolean]; apply: [cfg: StreamConfig] }>()

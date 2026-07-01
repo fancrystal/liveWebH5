@@ -33,9 +33,16 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    environment:
+      # nginx upstream addresses for proxied services.
+      # Local dev: same machine, services exposed on localhost.
+      NGINX_WHIP_UPSTREAM: "http://host.docker.internal:20080/index/api/whip"
+      NGINX_IM_UPSTREAM:   "https://host.docker.internal:15830"
     volumes:
       - ./dist:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.template.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./start-nginx.sh:/start-nginx.sh:ro
+    entrypoint: ["/bin/sh", "/start-nginx.sh"]
     depends_on:
       - srs
       - rtmp-relay

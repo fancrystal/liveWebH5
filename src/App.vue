@@ -33,9 +33,8 @@ import { useTencentIM } from '@/composables/useTencentIM'
 import { isSafari, supportsRTMP } from '@/utils/browser'
 import { signalService } from '@/services/SignalService'
 import { useRoomStore } from '@/stores/roomStore'
+import { SIGNAL_URL, VERBOSE_LOG } from '@/config/env'
 
-/** Verbose diagnostic logging, toggled by VITE_VERBOSE_LOG. */
-const VERBOSE_LOG = import.meta.env.VITE_VERBOSE_LOG === 'true'
 /** Prefixed console logger; only emits when VERBOSE_LOG is on. */
 function log(...args: unknown[]): void {
   if (VERBOSE_LOG) console.log('[App]', ...args)
@@ -149,7 +148,7 @@ watch(() => wbStore.activeMode, (mode) => {
 })
 
 onMounted(async () => {
-  log('onMounted 开始 | 构建模式 =', import.meta.env.MODE, '| VERBOSE_LOG =', VERBOSE_LOG)
+  log('onMounted 开始 | VERBOSE_LOG =', VERBOSE_LOG)
 
   // Exchange the one-time portal code for a session token (or reuse cookie /
   // dev env fallback). Block the UI until this resolves so an expired link
@@ -206,14 +205,14 @@ onMounted(async () => {
   // When VITE_SIGNAL_URL is empty (signaling backend not deployed), skip the
   // connection entirely — otherwise socket.io would fall back to the current
   // origin and spam failed wss attempts in the console.
-  const signalUrl = (import.meta.env.VITE_SIGNAL_URL ?? '').trim()
+  const signalUrl = SIGNAL_URL.trim()
   if (signalUrl) {
     const roomId = roomStore.room.id ?? 'default'
     const userId = 'host-' + Date.now()
     log('信令已配置，发起 socket.io 连接 →', signalUrl, '| roomId =', roomId, '| userId =', userId)
     signalService.connect(signalUrl, { roomId, userId, role: 'host' })
   } else {
-    log('信令未配置 (VITE_SIGNAL_URL 为空)，跳过连接 — 聊天/连麦功能禁用')
+    log('信令未配置 (SIGNAL_URL 为空)，跳过连接 — 聊天/连麦功能禁用')
   }
 
   log('onMounted 完成')
