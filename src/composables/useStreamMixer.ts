@@ -165,13 +165,23 @@ export function useStreamMixer() {
         } catch { /* upper canvas not ready */ }
       }
 
+      // ── Mixer draw order matches UI z-index exactly ──────────────────────────
+      // UI z-index: whiteboard (base) → screen-share → co-stream (none)
+      //   → camera (20/30) → video fullscreen (108) → video PIP (110)
+      // Every step below follows this exact order.
+
+      const insertEl   = videoInsertGetter()
+      const insertMode = mediaStore.videoInsertMode
+      const insertReady = insertEl instanceof HTMLVideoElement
+        && insertEl.readyState >= 2
+        && insertEl.videoWidth > 0
+
       // 3. Screen share (full overlay when active)
       if (mediaStore.isScreenSharing && mediaStore.screenStream) {
         if (!screenVideo || screenVideo.srcObject !== mediaStore.screenStream) {
           screenVideo = createVideoEl(mediaStore.screenStream)
         }
         if (screenVideo.readyState >= 2) {
-          // drawContain: letterbox landscape screen into portrait output when needed
           const svW = screenVideo.videoWidth  || width
           const svH = screenVideo.videoHeight || height
           drawContain(ctx, screenVideo, svW, svH, 0, 0, width, height)
@@ -180,31 +190,11 @@ export function useStreamMixer() {
         screenVideo = null
       }
 
-      // 3.5 Video insert — FULLSCREEN mode only
-      // Drawn here so it covers whiteboard/screen-share but stays UNDER
-      // co-stream participants (step 4) and camera PiP (step 5).
-      const insertEl   = videoInsertGetter()
-      const insertMode = mediaStore.videoInsertMode
-      const insertReady = insertEl instanceof HTMLVideoElement
-        && insertEl.readyState >= 2
-        && insertEl.videoWidth > 0
-
-      if (insertReady && insertMode === 'fullscreen') {
-        try {
-          // Black letterbox bars (matches preview .vip--fullscreen{background:#000}),
-          // then draw the video centered preserving aspect ratio (no stretch).
-          ctx.fillStyle = '#000000'
-          ctx.fillRect(0, 0, width, height)
-          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, 0, 0, width, height)
-        } catch { /* not ready */ }
-      }
-
-      // 4. Co-stream participants (adaptive grid at bottom-left)
+      // 4. Co-stream participants (no z-index in UI → below camera)
       const guests = coStreamStore.participantList
       if (guests.length > 0) {
         const cells = computeCoStreamLayout(guests.length, width, height)
 
-        // Clean up stale video elements
         participantVideos.forEach((_, id) => {
           if (!guests.find(p => p.id === id)) {
             participantVideos.get(id)?.remove()
@@ -231,12 +221,10 @@ export function useStreamMixer() {
             drawPlaceholder(ctx, cell, p.nickname)
           }
 
-          // Cell border
           ctx.strokeStyle = 'rgba(255,255,255,0.4)'
           ctx.lineWidth   = 2
           ctx.strokeRect(cell.x + 1, cell.y + 1, cell.w - 2, cell.h - 2)
 
-          // Name label
           const labelH = 22
           ctx.fillStyle = 'rgba(0,0,0,0.55)'
           ctx.fillRect(cell.x, cell.y + cell.h - labelH, cell.w, labelH)
@@ -244,60 +232,19 @@ export function useStreamMixer() {
           ctx.font      = `12px sans-serif`
           ctx.textAlign    = 'center'
           ctx.textBaseline = 'middle'
-          ctx.fillText(
-            p.nickname,
-            cell.x + cell.w / 2,
-            cell.y + cell.h - labelH / 2,
-          )
+          ctx.fillText(p.nickname, cell.x + cell.w / 2, cell.y + cell.h - labelH / 2)
         })
 
-        // Reset text align for subsequent draws
         ctx.textAlign    = 'left'
         ctx.textBaseline = 'alphabetic'
       }
 
-      // 4.5 Video insert — PIP mode
-      // Drawn AFTER co-stream so it appears on top of participant tiles,
-      // and BEFORE camera PiP so the camera stays the topmost overlay.
-      // Position/size mirrors the UI exactly via mediaStore.videoPip percentages.
-      if (insertReady && insertMode === 'pip') {
-        const vPip = mediaStore.videoPip
-        const pipX = Math.round(vPip.xPct * width)
-        const pipY = Math.round(vPip.yPct * height)
-        const pipW = Math.round(vPip.wPct * width)
-        const pipH = Math.round(vPip.hPct * height)
-        const r    = 8
-
-        ctx.save()
-        ctx.beginPath()
-        ctx.roundRect(pipX, pipY, pipW, pipH, r)
-        ctx.clip()
-        try {
-          // Black background inside the rounded rect, then aspect-preserving draw
-          // so portrait (phone) videos aren't horizontally stretched.
-          ctx.fillStyle = '#000000'
-          ctx.fillRect(pipX, pipY, pipW, pipH)
-          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, pipX, pipY, pipW, pipH)
-        } catch { /* not ready */ }
-        ctx.restore()
-
-        // Border
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-        ctx.lineWidth   = 2
-        ctx.beginPath()
-        ctx.roundRect(pipX, pipY, pipW, pipH, r)
-        ctx.stroke()
-      }
-
-      // 5. Camera PiP — position/size mirrors the UI exactly
+      // 5. Camera PiP (UI z-index 20 / 30 when maximized)
       if (mediaStore.isCameraOn && mediaStore.cameraStream) {
         if (!camVideo || camVideo.srcObject !== mediaStore.cameraStream) {
           camVideo = createVideoEl(mediaStore.cameraStream)
         }
         if (camVideo.readyState >= 2) {
-          // mediaStore.cameraPip is stored as percentages of the UI canvas
-          // container, so multiplying by output dimensions yields a PiP that
-          // mirrors the UI proportions regardless of UI canvas size.
           const pip = mediaStore.cameraPip
           const px  = Math.round(pip.xPct * width)
           const py  = Math.round(pip.yPct * height)
@@ -314,33 +261,22 @@ export function useStreamMixer() {
             })
           }
 
-          // Draw with object-fit:cover to avoid stretching non-16:9 cameras
           const vw = camVideo.videoWidth  || pw
           const vh = camVideo.videoHeight || ph
           const videoAspect  = vw / vh
           const targetAspect = pw / ph
           let sx: number, sy: number, sw: number, sh: number
           if (videoAspect > targetAspect) {
-            // Video is wider — crop left/right
-            sh = vh
-            sw = sh * targetAspect
-            sx = (vw - sw) / 2
-            sy = 0
+            sh = vh; sw = sh * targetAspect; sx = (vw - sw) / 2; sy = 0
           } else {
-            // Video is taller — crop top/bottom
-            sw = vw
-            sh = sw / targetAspect
-            sx = 0
-            sy = (vh - sh) / 2
+            sw = vw; sh = sw / targetAspect; sx = 0; sy = (vh - sh) / 2
           }
 
           const radius = 6
-          // Clip to rounded rect — matches CSS border-radius: 8px on CameraPreview
           ctx.save()
           ctx.beginPath()
           ctx.roundRect(px, py, pw, ph, radius)
           ctx.clip()
-          // Honour the mirror toggle — matches CSS scaleX(-1) on the preview <video>
           if (mediaStore.isCameraMirrored) {
             ctx.translate(px + pw, py)
             ctx.scale(-1, 1)
@@ -350,7 +286,6 @@ export function useStreamMixer() {
           }
           ctx.restore()
 
-          // Border — matches CSS border: 2px solid rgba(255,255,255,0.12)
           ctx.strokeStyle = 'rgba(255,255,255,0.3)'
           ctx.lineWidth   = 2
           ctx.beginPath()
@@ -359,6 +294,42 @@ export function useStreamMixer() {
         }
       } else {
         camVideo = null
+      }
+
+      // 6. Video insert — FULLSCREEN mode (UI z-index 108, above camera)
+      if (insertReady && insertMode === 'fullscreen') {
+        try {
+          ctx.fillStyle = '#000000'
+          ctx.fillRect(0, 0, width, height)
+          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, 0, 0, width, height)
+        } catch { /* not ready */ }
+      }
+
+      // 7. Video insert — PIP mode (UI z-index 110, topmost overlay)
+      if (insertReady && insertMode === 'pip') {
+        const vPip = mediaStore.videoPip
+        const pipX = Math.round(vPip.xPct * width)
+        const pipY = Math.round(vPip.yPct * height)
+        const pipW = Math.round(vPip.wPct * width)
+        const pipH = Math.round(vPip.hPct * height)
+        const r    = 8
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.roundRect(pipX, pipY, pipW, pipH, r)
+        ctx.clip()
+        try {
+          ctx.fillStyle = '#000000'
+          ctx.fillRect(pipX, pipY, pipW, pipH)
+          drawContain(ctx, insertEl!, insertEl!.videoWidth, insertEl!.videoHeight, pipX, pipY, pipW, pipH)
+        } catch { /* not ready */ }
+        ctx.restore()
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+        ctx.lineWidth   = 2
+        ctx.beginPath()
+        ctx.roundRect(pipX, pipY, pipW, pipH, r)
+        ctx.stroke()
       }
 
     }

@@ -58,8 +58,8 @@ function resolveWatchUrl(d: NonNullable<ActivityResponse['data']>): string {
     d.watchUrl ||
     d.liveShareUrl ||
     d.shareUrl ||
-    (Array.isArray(d.playStreamList) ? d.playStreamList.find(u => !!u?.trim()) : '') ||
     (Array.isArray(d.liveStreamUrlList) ? d.liveStreamUrlList.find(u => !!u?.trim()) : '') ||
+    (Array.isArray(d.playStreamList) ? d.playStreamList.find(u => !!u?.trim()) : '') ||
     ''
   )
 }

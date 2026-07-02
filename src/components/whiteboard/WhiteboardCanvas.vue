@@ -133,7 +133,12 @@ onUnmounted(() => {
     class="wb-container"
     :class="{
       'wb-container--overlay': wbStore.activeMode === 'screen' || wbStore.activeMode === 'document',
-      'wb-container--passthrough': wbStore.activeMode === 'document' && wbStore.activeTool === 'select',
+      // In screen-share or document+select mode, pass through all pointer events
+      // so the user can interact with the content below (screen preview / PDF page).
+      // Without this, the transparent Fabric canvas captures clicks and drawing
+      // tools can bleed onto the overlay — despite enterScreenMode() forcing select.
+      'wb-container--passthrough': wbStore.activeMode === 'screen'
+        || (wbStore.activeMode === 'document' && wbStore.activeTool === 'select'),
     }"
   >
     <canvas ref="canvasEl" />

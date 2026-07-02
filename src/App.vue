@@ -342,7 +342,8 @@ provide('onOpenSettings', () => { showSettings.value = true })
               @dragover="onCanvasDragOver"
               @drop="onCanvasDrop"
             >
-              <WhiteboardCanvas v-show="!wbStore.isContentHidden && (wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'screen' || wbStore.activeMode === 'document')" />
+              <!-- Screen mode excluded: whiteboard strokes must never show on top of shared screen -->
+              <WhiteboardCanvas v-show="!wbStore.isContentHidden && (wbStore.activeMode === 'whiteboard' || wbStore.activeMode === 'document')" />
               <ScreenSharePreview v-if="!wbStore.isContentHidden && wbStore.activeMode === 'screen' && mediaStore.isScreenSharing" />
               <DocViewer ref="docViewerRef" v-show="!wbStore.isContentHidden && wbStore.activeMode === 'document'" />
               <!-- Co-stream participant grid overlay (always visible when there are guests) -->
